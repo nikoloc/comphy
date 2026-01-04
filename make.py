@@ -66,6 +66,7 @@ ctx.add_flag(
         "-lm",  # link to the math library
         "-std=c99",  # use the c99 standard
         "-DWLR_USE_UNSTABLE",  # use the c99 standard
+        "-D_GNU_SOURCE",  # dont care about portability for now
     ]
 )
 

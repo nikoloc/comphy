@@ -1,12 +1,10 @@
 #include "backend.h"
 
+#include <wlr/render/allocator.h>
+#include <wlr/util/log.h>
+
 #include "alloc.h"
 #include "macros.h"
-
-static void
-handle_new_output(struct wl_listener *listener, void *data) {
-    todo();
-}
 
 static void
 handle_new_input(struct wl_listener *listener, void *data) {
@@ -16,30 +14,52 @@ handle_new_input(struct wl_listener *listener, void *data) {
 struct backend *
 backend_create(struct wl_display *display) {
     struct backend *backend = alloc(sizeof(*backend));
+    backend->display = display;
 
     struct wl_event_loop *loop = wl_display_get_event_loop(display);
     backend->wlr_backend = wlr_backend_autocreate(loop, &backend->wlr_session);
     if(!backend->wlr_backend) {
-        free(backend);
-        return NULL;
+        goto err;
     }
 
-    wl_list_init(&backend->outputs);
+    backend->wlr_renderer = wlr_renderer_autocreate(backend->wlr_backend);
+    if(!backend->wlr_renderer) {
+        wlr_log(WLR_ERROR, "failed creating the renderer");
+        goto err;
+    }
 
-    backend->new_output.notify = handle_new_output;
-    wl_signal_add(&backend->wlr_backend->events.new_output, &backend->new_output);
+    // backend->new_input.notify = handle_new_input;
+    // wl_signal_add(&backend->wlr_backend->events.new_input, &backend->new_input);
 
-    backend->new_input.notify = handle_new_input;
-    wl_signal_add(&backend->wlr_backend->events.new_input, &backend->new_input);
+    wlr_renderer_init_wl_display(backend->wlr_renderer, display);
+
+    backend->wlr_allocator = wlr_allocator_autocreate(backend->wlr_backend, backend->wlr_renderer);
+    if(!backend->wlr_allocator) {
+        wlr_log(WLR_ERROR, "failed to create the allocator");
+        goto renderer;
+    }
 
     return backend;
+
+renderer:
+    wlr_renderer_destroy(backend->wlr_renderer);
+err:
+    free(backend);
+    return NULL;
 }
 
 void
 backend_destroy(struct backend *backend) {
     wlr_backend_destroy(backend->wlr_backend);
+    wlr_renderer_destroy(backend->wlr_renderer);
+    wlr_allocator_destroy(backend->wlr_allocator);
 
     free(backend);
+}
+
+bool
+backend_start(struct backend *backend) {
+    wlr_backend_start(backend->wlr_backend);
 }
 
 bool

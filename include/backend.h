@@ -5,13 +5,13 @@
 #include <wlr/backend/session.h>
 
 struct backend {
+    struct wl_display *display;
+
     struct wlr_backend *wlr_backend;
     struct wlr_session *wlr_session;
 
-    struct wl_list outputs;
-
-    struct wl_listener new_output;
-    struct wl_listener new_input;
+    struct wlr_renderer *wlr_renderer;
+    struct wlr_allocator *wlr_allocator;
 };
 
 struct backend *
@@ -19,6 +19,9 @@ backend_create(struct wl_display *display);
 
 void
 backend_destroy(struct backend *backend);
+
+bool
+backend_start(struct backend *backend);
 
 bool
 backend_switch_vt_session(struct backend *backend, int vt);
