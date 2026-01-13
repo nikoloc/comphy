@@ -4,15 +4,24 @@
 #include <wlr/types/wlr_output.h>
 
 #include "backend.h"
-#include "ints.h"
 
 struct output_config {
-    u32 width, height, refresh;
-    // ...
+    int x, y;
+    int width, height, refresh;
+
+    float scale;
+
+    // workspaces etc
 };
 
 struct output {
     struct wlr_output *wlr_output;
+    struct output_manager *output_manager;
+    struct wlr_box box;
+
+    bool configured;
+
+    struct wl_list link;
 };
 
 struct output_manager {

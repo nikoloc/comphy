@@ -3,12 +3,14 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 static inline void *
 alloc(size_t size) {
-    void *p = calloc(1, size);
+    void *p = malloc(size);
     assert(p);
 
+    memset(p, 0, size);
     return p;
 }
 

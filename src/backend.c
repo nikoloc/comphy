@@ -28,16 +28,19 @@ backend_create(struct wl_display *display) {
         goto err;
     }
 
-    // backend->new_input.notify = handle_new_input;
-    // wl_signal_add(&backend->wlr_backend->events.new_input, &backend->new_input);
-
-    wlr_renderer_init_wl_display(backend->wlr_renderer, display);
+    if(!wlr_renderer_init_wl_display(backend->wlr_renderer, display)) {
+        wlr_log(WLR_ERROR, "failed setting up the renderer");
+        goto renderer;
+    }
 
     backend->wlr_allocator = wlr_allocator_autocreate(backend->wlr_backend, backend->wlr_renderer);
     if(!backend->wlr_allocator) {
         wlr_log(WLR_ERROR, "failed to create the allocator");
         goto renderer;
     }
+
+    // backend->new_input.notify = handle_new_input;
+    // wl_signal_add(&backend->wlr_backend->events.new_input, &backend->new_input);
 
     return backend;
 
@@ -59,7 +62,7 @@ backend_destroy(struct backend *backend) {
 
 bool
 backend_start(struct backend *backend) {
-    wlr_backend_start(backend->wlr_backend);
+    return wlr_backend_start(backend->wlr_backend);
 }
 
 bool
