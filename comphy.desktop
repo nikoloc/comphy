@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=comphy
+Comment=just a comfy wayland compositor
+Exec=comphy
+Type=Application
+DesktopNames=comphy
+Keywords=tiling;wayland;compositor;

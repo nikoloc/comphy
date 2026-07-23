@@ -1,0 +1,26 @@
+#ifndef COMPHY_H
+#define COMPHY_H
+
+// here we define the desired versions of interfaces
+
+#ifndef COMPHY_XDG_SHELL_VERSION
+#define COMPHY_XDG_SHELL_VERSION (6)
+#endif
+
+#ifndef COMPHY_LAYER_SHELL_VERSION
+#define COMPHY_LAYER_SHELL_VERSION (4)
+#endif
+
+#ifndef COMPHY_PRESENTATION_VERSION
+#define COMPHY_PRESENTATION_VERSION (2)
+#endif
+
+#ifndef COMPHY_FRACTIONAL_SCALE_VERSION
+#define COMPHY_FRACTIONAL_SCALE_VERSION (2)
+#endif
+
+#ifndef COMPHY_CURSOR_SHAPE_VERSION
+#define COMPHY_CURSOR_SHAPE_VERSION (2)
+#endif
+
+#endif

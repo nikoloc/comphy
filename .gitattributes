@@ -1,7 +1,0 @@
-*.c     filter=tabspace
-*.h     filter=tabspace
-*.sh    filter=tabspace
-*.conf  filter=tabspace
-
-# Auto detect text files and perform LF normalization
-* text=auto
