@@ -7,6 +7,7 @@
 #include "decoration.h"
 #include "gamma_control.h"
 #include "layer_shell.h"
+#include "operation.h"
 #include "scene.h"
 #include "seat.h"
 #include "util/ints.h"
@@ -34,7 +35,8 @@ struct state {
 
     struct wl_list pointers;
     struct wl_list keyboards;
-    struct keyboard *last_used_keyboard;
+    // TODO: remove this and instead get it from the seat when needed
+    struct keyboard *active_keyboard;
 
     struct wl_list outputs;
 

@@ -3,8 +3,6 @@
 
 #include <wlr/types/wlr_seat.h>
 
-#include "state.h"
-
 struct seat {
     struct wlr_seat *wlr_seat;
 
@@ -26,6 +24,8 @@ seat_init(struct seat *seat, struct wl_display *display);
 
 void
 seat_deinit(struct seat *seat);
+
+struct state;
 
 void
 seat_inform_capabilities(struct state *state);

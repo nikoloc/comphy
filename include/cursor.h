@@ -25,4 +25,9 @@ cursor_init(struct cursor *cursor, struct wlr_output_layout *output_layout);
 void
 cursor_deinit(struct cursor *cursor);
 
+struct state;
+
+struct output *
+cursor_get_output(struct state *state);
+
 #endif

@@ -13,6 +13,7 @@ scene_init(struct scene *scene, struct wlr_output_layout *output_layout) {
     scene->trees.floats = wlr_scene_tree_create(&scene->wlr_scene->tree);
     scene->trees.top = wlr_scene_tree_create(&scene->wlr_scene->tree);
     scene->trees.fullscreen = wlr_scene_tree_create(&scene->wlr_scene->tree);
+    scene->trees.grab = wlr_scene_tree_create(&scene->wlr_scene->tree);
     scene->trees.overlay = wlr_scene_tree_create(&scene->wlr_scene->tree);
     scene->trees.lock = wlr_scene_tree_create(&scene->wlr_scene->tree);
 }

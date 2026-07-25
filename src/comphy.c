@@ -135,7 +135,7 @@ main(int argc, char *argv[]) {
     wlr_log(WLR_INFO, "running 'comphy' on socket '%s'", socket);
     wl_display_run(state->display);
 
-    // destroy all clients and quit
+    // once it returns destroy all clients and cleanup
     wl_display_destroy_clients(state->display);
 cleanup:
     scene_deinit(&state->scene);

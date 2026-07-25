@@ -1,9 +1,16 @@
 #include "xdg_shell.h"
 
 #include "comphy.h"
+#include "state.h"
+#include "util/macros.h"
 
 static void
 handle_new_toplevel(struct wl_listener *listener, void *data) {
+    UNUSED(listener);
+
+    struct wlr_xdg_toplevel *wlr_toplevel = data;
+    struct state *state = state_get();
+    toplevel_create(state, wlr_toplevel);
 }
 
 static void

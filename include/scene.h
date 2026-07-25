@@ -15,6 +15,7 @@ struct scene {
         struct wlr_scene_tree *tiled;
         struct wlr_scene_tree *top;
         struct wlr_scene_tree *fullscreen;
+        struct wlr_scene_tree *grab;
         struct wlr_scene_tree *overlay;
         struct wlr_scene_tree *lock;
     } trees;

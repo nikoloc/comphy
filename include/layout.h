@@ -3,11 +3,10 @@
 
 #include <stdint.h>
 
-#include "comphy.h"
-#include "output.h"
+#include "workspace.h"
 
 void
-layout_configure(struct workspace *workspace);
+layout_configure(struct state *state, struct workspace *workspace);
 
 // t2 needs to be after t1 if in the same list (both slaves)
 void

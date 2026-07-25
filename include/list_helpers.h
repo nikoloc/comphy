@@ -35,11 +35,19 @@ wl_list_get_prev_or_next(struct wl_list *list, struct wl_list *elem) {
 
 static inline struct wl_list *
 wl_list_first(struct wl_list *list) {
+    if(list->next == list) {
+        return NULL;
+    }
+
     return list->next;
 }
 
 static inline struct wl_list *
 wl_list_last(struct wl_list *list) {
+    if(list->prev == list) {
+        return NULL;
+    }
+
     return list->prev;
 }
 

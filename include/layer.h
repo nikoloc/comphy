@@ -23,15 +23,15 @@ struct layer {
 };
 
 struct layer *
-layer_create(struct wlr_layer_surface_v1 *wlr_layer);
+layer_create(struct state *state, struct wlr_layer_surface_v1 *wlr_layer);
 
 void
-layer_surfaces_commit(struct output *output);
+layer_surfaces_commit(struct state *state, struct output *output);
 
 void
-layer_focus(struct layer *layer);
+layer_focus(struct state *state, struct layer *layer);
 
 void
-layer_under_fullscreen_set_enabled(struct output *output, bool enable);
+layer_under_fullscreen_set_enabled(struct state *state, struct output *output, bool enable);
 
 #endif

@@ -8,7 +8,7 @@
 struct output {
     struct wlr_output *wlr_output;
     struct wlr_scene_output *scene_output;
-    struct wlr_box usable_area;
+    struct wlr_box full_area, usable_area;
 
     struct wl_list workspaces;
 
@@ -17,7 +17,7 @@ struct output {
         struct wl_list bottom;
         struct wl_list top;
         struct wl_list overlay;
-    } layers;
+    } layer;
 
     struct workspace *active_workspace;
 
@@ -32,6 +32,10 @@ struct output {
 
 struct output *
 output_create(struct state *state, struct wlr_output *wlr_output);
+
+// give focus to some view on this workspace in the general focus order; does not handle workspace switching!
+void
+output_focus(struct state *state, struct output *output);
 
 // struct wlr_box
 // output_add_to_layout(struct output *output, struct output_config *config);
@@ -51,13 +55,10 @@ bool
 output_apply_preffered_mode(struct wlr_output *wlr_output, struct wlr_output_state *state);
 
 struct output *
-output_get_relative(struct output *output, enum wlr_direction direction);
+output_get_relative(struct state *state, struct output *output, enum wlr_direction direction);
 
 void
-output_warp_cursor(struct output *output);
-
-void
-output_focus(struct mwc_output *output, enum wlr_direction side);
+output_warp_cursor(struct state *state, struct output *output);
 
 void
 output_move_workspaces(struct output *dest, struct output *src);

@@ -7,10 +7,13 @@
 #include "output.h"
 #include "toplevel.h"
 
-struct mwc_workspace {
-    int index;
+struct workspace {
+    int idx;
+
     struct output *output;
-    struct workspace_config *config;
+    // in case this workspaces output gets unplugged and then plugged again we use this info to return it to its
+    // original output
+    string_t original_output_name;
 
     struct toplevel *master;
     struct wl_list slaves, floats;
@@ -19,16 +22,16 @@ struct mwc_workspace {
     struct wl_list link;
 };
 
-void
-workspace_create_for_output(struct mwc_output *output, struct workspace_config *config);
+struct workspace *
+workspace_create(struct state *state, struct output *output, int idx);
 
 void
-change_workspace(struct mwc_workspace *workspace, bool keep_focus);
+workspace_destroy(struct state *state, struct workspace *workspace);
 
 void
-toplevel_move_to_workspace(struct mwc_toplevel *toplevel, struct mwc_workspace *workspace);
+workspace_set_active(struct state *state, struct workspace *workspace);
 
-struct mwc_toplevel *
-workspace_find_closest_floating_toplevel(struct mwc_workspace *workspace, enum mwc_direction side);
+void
+workspace_show_toplevels(struct state *state, struct workspace *workspace, bool show);
 
 #endif

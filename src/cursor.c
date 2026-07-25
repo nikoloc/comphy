@@ -3,6 +3,7 @@
 #include "comphy.h"
 #include "state.h"
 #include "util/macros.h"
+#include "wlr/util/log.h"
 
 static void
 handle_motion(struct wl_listener *listener, void *data) {
@@ -91,4 +92,18 @@ cursor_deinit(struct cursor *cursor) {
     }
 
     wlr_cursor_destroy(cursor->wlr_cursor);
+}
+
+struct output *
+cursor_get_output(struct state *state) {
+    struct wlr_output *wlr_output =
+            wlr_output_layout_output_at(state->output_layout, state->cursor.wlr_cursor->x, state->cursor.wlr_cursor->y);
+
+    if(!wlr_output) {
+        wlr_log(WLR_ERROR, "seems like the pointer is not on any output, bug?");
+        return NULL;
+    }
+
+    struct output *output = wlr_output->data;
+    return output;
 }

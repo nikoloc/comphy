@@ -3,9 +3,11 @@
 
 #include <wlr/types/wlr_xdg_shell.h>
 
+#include "view.h"
+
 struct popup {
     struct wlr_xdg_popup *xdg_popup;
-    enum view_type view_type;
+    enum view view;
 
     struct wlr_scene_tree *scene;
 
@@ -16,7 +18,7 @@ struct popup {
 struct popup *
 popup_create(struct wlr_xdg_popup *wlr_popup);
 
-enum view_type *
+enum view *
 popup_get_root_parent(struct popup *popup);
 
 #endif
