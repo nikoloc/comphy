@@ -3,8 +3,6 @@
 
 #include <wlr/types/wlr_compositor.h>
 
-#include "util/macros.h"
-
 enum view {
     VIEW_TOPLEVEL,
     VIEW_POPUP,
@@ -15,22 +13,19 @@ enum view {
 enum view *
 view_root_parent_of_surface(struct wlr_surface *surface);
 
-enum view *
-view_at(double lx, double ly, struct wlr_surface **surface, double *sx, double *sy);
+struct state;
 
-// TODO: move to .c, or delete entirely
-void *
-view_from(enum view *type) {
-    switch(*type) {
-        case VIEW_TOPLEVEL:
-            return CONTAINER_OF(type, struct toplevel, view);
-        case VIEW_POPUP:
-            return CONTAINER_OF(type, struct popup, view);
-        case VIEW_LAYER:
-            return CONTAINER_OF(type, struct layer, view);
-        case VIEW_LOCK_SURFACE:
-            return CONTAINER_OF(type, struct lock_surface, view);
-    }
-}
+enum view *
+view_at(struct state *state, double lx, double ly, struct wlr_surface **surface, double *sx, double *sy);
+
+// get the focused views in the correct focus rule order: lock, layer, toplevel
+enum view *
+view_get_focused(struct state *state);
+
+struct output *
+view_get_output(enum view *view);
+
+void
+view_focus(struct state *state, enum view *view);
 
 #endif

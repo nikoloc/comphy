@@ -5,6 +5,8 @@
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/util/log.h>
 
+#include "keyboard.h"
+#include "pointer.h"
 #include "seat.h"
 #include "state.h"
 #include "util/ints.h"

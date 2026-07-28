@@ -10,15 +10,155 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
-#include "config.h"
 #include "layer.h"
-#include "layout.h"
 #include "list_helpers.h"
 #include "pointer.h"
 #include "toplevel.h"
 #include "util/macros.h"
 #include "util/memory.h"
+#include "util/time_util.h"
 #include "workspace.h"
+
+static inline bool
+mode_fit_and_better(struct wlr_output_mode *mode, int width, int height, int refresh, struct wlr_output_mode *best) {
+    if(mode->width != width && mode->height != height) {
+        return false;
+    }
+
+    return !best || abs(mode->refresh - refresh) < abs(best->refresh - refresh);
+}
+
+static struct wlr_output_mode *
+find_mode(struct output *output, int width, int height, int refresh) {
+    struct wlr_output_mode *mode = NULL;
+
+    struct wlr_output_mode *iter;
+    wl_list_for_each(iter, &output->wlr_output->modes, link) {
+        if(mode_fit_and_better(iter, width, height, refresh, mode)) {
+            mode = iter;
+        }
+    }
+
+    if(mode) {
+        return mode;
+    }
+
+    return wlr_output_preferred_mode(output->wlr_output);
+}
+
+static struct wlr_output_mode *
+find_highest_refresh(struct output *output, int width, int height) {
+    struct wlr_output_mode *mode = NULL;
+
+    struct wlr_output_mode *iter;
+    wl_list_for_each(iter, &output->wlr_output->modes, link) {
+        if(iter->width == width && iter->height == height && (mode == NULL || iter->refresh > mode->refresh)) {
+            mode = iter;
+        }
+    }
+
+    if(mode) {
+        return mode;
+    }
+
+    return wlr_output_preferred_mode(output->wlr_output);
+}
+
+static void
+modeset(struct output *output, int width, int height, int refresh, double scale) {
+    bool wants_preferred = width == 0 || height == 0;
+    bool wants_highest_refresh = refresh == 0;
+
+    struct wlr_output_mode *mode = wants_preferred       ? wlr_output_preferred_mode(output->wlr_output)
+                                 : wants_highest_refresh ? find_highest_refresh(output, width, height)
+                                                         : find_mode(output, width, height, refresh);
+
+    if(!mode) {
+        wlr_log(WLR_INFO, "output '%s' has no modes available", output->wlr_output->name);
+        return;
+    }
+
+    wlr_log(WLR_INFO, "modesetting output '%s' to %dx%d@%dmHz", output->wlr_output->name, mode->width, mode->height,
+            mode->refresh);
+
+    struct wlr_output_state state;
+    wlr_output_state_init(&state);
+    wlr_output_state_set_enabled(&state, true);
+    wlr_output_state_set_scale(&state, scale);
+    wlr_output_state_set_mode(&state, mode);
+
+    // try to commit the state. it should not fail!
+    if(!wlr_output_commit_state(output->wlr_output, &state)) {
+        wlr_log(WLR_ERROR, "could not modeset the output '%s'", output->wlr_output->name);
+    }
+
+    wlr_output_state_finish(&state);
+}
+
+static void
+handle_frame(struct wl_listener *listener, void *data) {
+    UNUSED(data);
+
+    struct output *output = CONTAINER_OF(listener, struct output, destroy);
+
+    wlr_scene_output_commit(output->scene_output, NULL);
+
+    struct timespec now = time_now_timespec();
+    wlr_scene_output_send_frame_done(output->scene_output, &now);
+}
+
+static void
+handle_request_state(struct wl_listener *listener, void *data) {
+    struct output *output = CONTAINER_OF(listener, struct output, request_state);
+
+    struct wlr_output_event_request_state *request_state = data;
+    wlr_output_commit_state(output->wlr_output, request_state->state);
+}
+
+static void
+handle_destroy(struct wl_listener *listener, void *data) {
+    UNUSED(data);
+
+    struct output *output = CONTAINER_OF(listener, struct output, destroy);
+    struct state *state = state_get();
+
+    wlr_log(WLR_DEBUG, "destroying output '%s'", output->wlr_output->name);
+
+    if(!state->is_exiting) {
+        struct wl_list *next = wl_list_get_next_or_prev(&state->outputs, &output->link);
+        if(next) {
+            struct output *next_output = CONTAINER_OF(next, struct output, link);
+            // TODO: orphans
+            // struct workspace *w, *tmp;
+            // wl_list_for_each_safe(w, tmp, &output->workspaces, link) {
+            //     w->output = new;
+            //     wl_list_remove(&w->link);
+            //     wl_list_insert(&new->workspaces, &w->link);
+            //     layout_set_pending_state(w);
+            // }
+
+            enum view *view = view_get_focused(state);
+            if(view) {
+                // TODO: check if the layers and lock surfaces are destroyed before hand
+                struct output *focused_output = view_get_output(view);
+                if(focused_output == output) {
+                    // if the focus is on this output move it elsewhere
+                    output_focus(state, next_output);
+                }
+            }
+        }
+    }
+
+    if(output->lock_rect) {
+        wlr_scene_node_destroy(&output->lock_rect->node);
+    }
+
+    wl_list_remove(&output->frame.link);
+    wl_list_remove(&output->request_state.link);
+    wl_list_remove(&output->destroy.link);
+
+    free(output);
+}
 
 struct output *
 output_create(struct state *state, struct wlr_output *wlr_output) {
@@ -26,9 +166,76 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
     output->wlr_output = wlr_output;
     wlr_output->data = output;
 
-    // TODO: finish and take the configuration code from comphy-old
+    wlr_log(WLR_DEBUG, "new output '%s'", output->wlr_output->name);
+
+    wlr_output_init_render(wlr_output, state->backend.allocator, state->backend.renderer);
+
+    // TODO: not needed anymore?
+    // struct output_config config = {0};
+    // output_configure(state, output, &config);
+
+    output->scene_output = wlr_scene_output_create(state->scene.wlr_scene, wlr_output);
+    output->output_layout_output = wlr_output_layout_add_auto(state->output_layout, output->wlr_output);
+
+    output->full_area = (struct wlr_box){
+            output->output_layout_output->x,
+            output->output_layout_output->y,
+            output->wlr_output->width,
+            output->wlr_output->height,
+    };
+    output->usable_area = output->full_area;
+
+    // TODO: when locking
+    // output->lock_rect = wlr_scene_rect_create(&state->scene.wlr_scene->tree, 0, 0, (float[4]){0.0f, 0.0f,
+    // 0.0f, 1.0f}); wlr_scene_node_place_above(&output->session_lock_rect->node, &server.overlay_tree->node);
+    // wlr_scene_node_set_enabled(&output->session_lock_rect->node, server.mode == SERVER_MODE_LOCKED);
+
+    // create the dummy workspace. TODO: find orphans when hotplugging
+    wl_list_init(&output->workspaces);
+    output->dummy_workspace = workspace_create(state, output, 1);
+    output->active_workspace = output->dummy_workspace;
+    wl_list_insert(&output->workspaces, &output->dummy_workspace->link);
+
+    // initialize per output layers on this output
+    wl_list_init(&output->layer.background);
+    wl_list_init(&output->layer.bottom);
+    wl_list_init(&output->layer.top);
+    wl_list_init(&output->layer.overlay);
+
+    // insert it into the global list
+    wl_list_insert(&state->outputs, &output->link);
+
+    output->frame.notify = handle_frame;
+    wl_signal_add(&wlr_output->events.frame, &output->frame);
+
+    output->destroy.notify = handle_destroy;
+    wl_signal_add(&wlr_output->events.destroy, &output->destroy);
+
+    output->request_state.notify = handle_request_state;
+    wl_signal_add(&wlr_output->events.request_state, &output->request_state);
 
     return output;
+}
+
+void
+output_configure(struct state *state, struct output *output, struct output_config *config) {
+    modeset(output, config->width, config->height, config->refresh, config->scale);
+
+    // if() {
+    //     return wlr_output_layout_add_auto(g.wlr_output_layout, output->wlr_output);
+    // }
+
+    // TODO: this will work for now, but add the configuration through `wlr_randr` tool
+    output->output_layout_output = wlr_output_layout_add(state->output_layout, output->wlr_output, 0, 0);
+
+    output->full_area = (struct wlr_box){
+            output->output_layout_output->x,
+            output->output_layout_output->y,
+            output->wlr_output->width,
+            output->wlr_output->height,
+    };
+
+    output->usable_area = output->full_area;
 }
 
 void
@@ -86,128 +293,6 @@ output_focus(struct state *state, struct output *output) {
     }
 }
 
-// void
-// server_handle_new_output(struct wl_listener *listener, void *data) {
-//   struct wlr_output *wlr_output = data;
-//
-//   /* we try to find the config for this output */
-//   struct output_config *output_config = NULL;
-//
-//   struct output_config *o;
-//   wl_list_for_each(o, &server.config->outputs, link) {
-//     if(strcmp(o->name, wlr_output->name) == 0) {
-//       output_config = o;
-//       break;
-//     }
-//   }
-//
-//   bool success = output_initialize(wlr_output, output_config);
-//   if(!success) return;
-//
-//   /* allocates and configures our state for this output */
-//   struct mwc_output *output = calloc(1, sizeof(*output));
-//   output->wlr_output = wlr_output;
-//
-//   wlr_output->data = output;
-//
-//   output->frame.notify = output_handle_frame;
-//   wl_signal_add(&wlr_output->events.frame, &output->frame);
-//
-//   output->request_state.notify = output_handle_request_state;
-//   wl_signal_add(&wlr_output->events.request_state, &output->request_state);
-//
-//   output->destroy.notify = output_handle_destroy;
-//   wl_signal_add(&wlr_output->events.destroy, &output->destroy);
-//
-//   wl_list_init(&output->workspaces);
-//
-//   /* we check if this output already has some workspaces created */
-//   bool found = output_transfer_existing_workspaces(output);
-//   if(!found) {
-//     struct workspace_config *c;
-//     /* we go in reverse to first add workspaces that were on top of config */
-//     wl_list_for_each_reverse(c, &server.config->workspaces, link) {
-//       if(strcmp(c->output, wlr_output->name) == 0) {
-//         workspace_create_for_output(output, c);
-//       }
-//     }
-//   }
-//
-//   /* if we didnt find any workspace config, then we give it workspace with index 0 */
-//   if(wl_list_empty(&output->workspaces)) {
-//     wlr_log(WLR_ERROR, "no workspace config specified for output %s."
-//             "using default workspace 0. please add a valid workspace config.",
-//             wlr_output->name);
-//
-//     struct mwc_workspace *workspace = calloc(1, sizeof(*workspace));
-//     wl_list_init(&workspace->floating_toplevels);
-//     wl_list_init(&workspace->masters);
-//     wl_list_init(&workspace->slaves);
-//     workspace->output = output;
-//     workspace->index = 0;
-//
-//     wl_list_insert(&output->workspaces, &workspace->link);
-//
-//     output->active_workspace = workspace;
-//   }
-//
-//   wl_list_init(&output->layers.background);
-//   wl_list_init(&output->layers.bottom);
-//   wl_list_init(&output->layers.top);
-//   wl_list_init(&output->layers.overlay);
-//
-//   wl_list_insert(&server.outputs, &output->link);
-//
-//   output->scene_output = wlr_scene_output_create(server.scene, output->wlr_output);
-//   struct wlr_box output_box = output_add_to_layout(output, output_config);
-//
-//   /* if there were some existing workspaces then we reconfigure them */
-//   if(found) {
-//     struct mwc_workspace *w;
-//     wl_list_for_each(w, &output->workspaces, link) {
-//       layout_set_pending_state(w);
-//       /* this pathces some ghosts that might have been left in the scene */
-//       if(w != output->active_workspace) {
-//         struct mwc_toplevel *t;
-//         wl_list_for_each(t, &w->floating_toplevels, link) {
-//           wlr_scene_node_set_enabled(&t->scene_tree->node, false);
-//         }
-//         wl_list_for_each(t, &w->masters, link) {
-//           wlr_scene_node_set_enabled(&t->scene_tree->node, false);
-//         }
-//         wl_list_for_each(t, &w->slaves, link) {
-//           wlr_scene_node_set_enabled(&t->scene_tree->node, false);
-//         }
-//       }
-//     }
-//   }
-//
-//   if(server.config->blur) {
-//     output->blur = wlr_scene_optimized_blur_create(&server.scene->tree,
-//                                                    wlr_output->width, wlr_output->height);
-//     wlr_scene_set_blur_data(server.scene, server.config->blur_params);
-//     wlr_scene_node_place_above(&output->blur->node, &server.background_tree->node);
-//     wlr_scene_node_set_position(&output->blur->node, output_box.x, output_box.y);
-//   }
-//
-//   /* if first output then set server's active workspace to this one */
-//   if(server.active_workspace == NULL) {
-//     server.active_workspace = output->active_workspace;
-//   }
-// }
-//
-// struct mwc_workspace *
-// output_find_owned_workspace(struct mwc_output *output) {
-//   struct mwc_workspace *w;
-//   wl_list_for_each(w, &output->workspaces, link) {
-//     if(strcmp(w->config->output, output->wlr_output->name) == 0) {
-//       return w;
-//     }
-//   }
-//
-//   return NULL;
-// }
-//
 // bool
 // output_transfer_existing_workspaces(struct mwc_output *output) {
 //   /* if this output is reconnected then its workspaces are on some other monitor,
@@ -241,156 +326,6 @@ output_focus(struct state *state, struct output *output) {
 //
 // }
 //
-// struct wlr_box
-// output_add_to_layout(struct mwc_output *output, struct output_config *config) {
-//   struct wlr_output_layout_output *layout;
-//   if(config != NULL) {
-//     wlr_log(WLR_INFO, "setting position of output %s to %d, %d",
-//             output->wlr_output->name, config->x, config->y);
-//     layout = wlr_output_layout_add(server.output_layout, output->wlr_output,
-//                                    config->x, config->y);
-//   } else {
-//     layout = wlr_output_layout_add_auto(server.output_layout, output->wlr_output);
-//   }
-//
-//   wlr_scene_output_layout_add_output(server.scene_layout, layout, output->scene_output);
-//
-//   struct wlr_box output_box;
-//   wlr_output_layout_get_box(server.output_layout, output->wlr_output, &output_box);
-//   output->usable_area = output_box;
-//
-//   return output_box;
-// }
-//
-// bool
-// output_initialize(struct wlr_output *wlr_output, struct output_config *config) {
-//   wlr_output_init_render(wlr_output, server.allocator, server.renderer);
-//
-//   struct wlr_output_state state;
-//   wlr_output_state_init(&state);
-//   wlr_output_state_set_enabled(&state, true);
-//
-//   if(config != NULL) {
-//     wlr_output_state_set_scale(&state, config->scale);
-//     /* we try to find the closest supported mode for this output, that means:
-//      *  - same resolution
-//      *  - closest refresh rate
-//      * if there is none we take the prefered mode for the output */
-//     struct wlr_output_mode *best_match = NULL;
-//     uint32_t best_match_diff = UINT32_MAX;
-//
-//     struct wlr_output_mode *m;
-//     wl_list_for_each(m, &wlr_output->modes, link) {
-//       if(m->width == config->width && m->height == config->height
-//          && abs((int)m->refresh - (int)config->refresh_rate) < best_match_diff) {
-//         best_match = m;
-//         best_match_diff = abs((int)m->refresh - (int)config->refresh_rate);
-//       }
-//     }
-//
-//     if(best_match != NULL) {
-//       wlr_log(WLR_INFO, "trying to set mode for output %s to %dx%d@%dmHz",
-//               wlr_output->name, best_match->width, best_match->height, best_match->refresh);
-//       /* we set the mode and try to commit the state.
-//        * if it fails then we backup to the preffered. it should not fail! */
-//       wlr_output_state_set_mode(&state, best_match);
-//       bool success = wlr_output_commit_state(wlr_output, &state);
-//       if(!success) {
-//         success = output_apply_preffered_mode(wlr_output, &state);
-//         if(!success) {
-//           wlr_log(WLR_ERROR, "couldn't apply the preffered mode to the output %s", wlr_output->name);
-//           /* free the resource */
-//           wlr_output_state_finish(&state);
-//           return false;
-//         }
-//       }
-//     } else {
-//       bool success = output_apply_preffered_mode(wlr_output, &state);
-//       if(!success) {
-//         wlr_log(WLR_ERROR, "couldn't apply the preffered mode to the output %s", wlr_output->name);
-//         /* free the resource */
-//         wlr_output_state_finish(&state);
-//         return false;
-//       }
-//     }
-//   } else {
-//     wlr_log(WLR_INFO, "output %s not specified in the config; using the preffered mode.", wlr_output->name);
-//     /* if it is not specified in the config we take its preffered mode */
-//     bool success = output_apply_preffered_mode(wlr_output, &state);
-//     if(!success) {
-//       wlr_log(WLR_ERROR, "couldn't apply the preffered mode to the output %s", wlr_output->name);
-//       /* free the resource */
-//       wlr_output_state_finish(&state);
-//       return false;
-//     }
-//   }
-//
-//   wlr_log(WLR_INFO, "successfully set up output %s", wlr_output->name);
-//   wlr_output_state_finish(&state);
-//
-//   return true;
-// }
-//
-// bool
-// output_apply_preffered_mode(struct wlr_output *wlr_output, struct wlr_output_state *state) {
-//   struct wlr_output_mode *mode = wlr_output_preferred_mode(wlr_output);
-//   wlr_output_state_set_mode(state, mode);
-//
-//   return wlr_output_commit_state(wlr_output, state);
-// }
-//
-// double
-// output_frame_duration_ms(struct mwc_output *output) {
-//   return 1000000.0 / output->wlr_output->refresh;
-// }
-//
-// struct mwc_output *
-// output_get_relative(struct mwc_output *output, enum mwc_direction direction) {
-//   struct wlr_box original_output_box;
-//   wlr_output_layout_get_box(server.output_layout,
-//                             output->wlr_output, &original_output_box);
-//
-//   original_output_box.width *= output->wlr_output->scale;
-//   original_output_box.height *= output->wlr_output->scale;
-//
-//   uint32_t original_output_midpoint_x =
-//     original_output_box.x + original_output_box.width / 2;
-//   uint32_t original_output_midpoint_y =
-//     original_output_box.y + original_output_box.height / 2;
-//
-//   struct mwc_output *o;
-//   wl_list_for_each(o, &server.outputs, link) {
-//     struct wlr_box output_box;
-//     wlr_output_layout_get_box(server.output_layout, o->wlr_output, &output_box);
-//     output_box.width *= o->wlr_output->scale;
-//     output_box.height *= o->wlr_output->scale;
-//
-//     if(direction == MWC_LEFT &&
-//       original_output_box.x == output_box.x + output_box.width
-//       && original_output_midpoint_y > output_box.y
-//       && original_output_midpoint_y < output_box.y + output_box.height) {
-//       return o;
-//     } else if(direction == MWC_RIGHT
-//       && original_output_box.x + original_output_box.width == output_box.x
-//       && original_output_midpoint_y > output_box.y
-//       && original_output_midpoint_y < output_box.y + output_box.height) {
-//       return o;
-//     } else if(direction == MWC_UP
-//       && original_output_box.y == output_box.y + output_box.height
-//       && original_output_midpoint_x > output_box.x
-//       && original_output_midpoint_x < output_box.x + output_box.width) {
-//       return o;
-//     } else if(direction == MWC_DOWN
-//       && original_output_box.y + original_output_box.height == output_box.y
-//       && original_output_midpoint_x > output_box.x
-//       && original_output_midpoint_x < output_box.x + output_box.width) {
-//       return o;
-//     }
-//   }
-//
-//   return NULL;
-// }
-//
 // void
 // cursor_jump_output(struct mwc_output *output) {
 //   struct wlr_box output_box;
@@ -404,56 +339,6 @@ output_focus(struct state *state, struct output *output) {
 //   clock_gettime(CLOCK_MONOTONIC, &now);
 //
 //   pointer_handle_focus(now.tv_sec * 1000 + now.tv_nsec / 1000, false);
-// }
-//
-// void
-// focus_output(struct mwc_output *output, enum mwc_direction side) {
-//   assert(output != NULL);
-//
-//   if(server.lock != NULL) {
-//     if(!wl_list_empty(&server.lock->surfaces)) {
-//       struct mwc_lock_surface *l = wl_container_of(server.lock->surfaces.next, l, link);
-//       focus_lock_surface(l);
-//     }
-//     return;
-//   }
-//
-//   struct mwc_toplevel *focus_next = NULL;
-//   struct mwc_workspace *workspace = output->active_workspace;
-//
-//   if(workspace->fullscreen_toplevel != NULL) {
-//     focus_next = workspace->fullscreen_toplevel;
-//   } else if(server.focused_toplevel == NULL || !server.focused_toplevel->floating) {
-//     bool master = server.focused_toplevel != NULL
-//       ? toplevel_is_master(server.focused_toplevel)
-//       : true;
-//     focus_next = layout_find_closest_tiled_toplevel(output->active_workspace,
-//                                                        master, side);
-//     /* if there are no tiled toplevels we try floating */
-//     if(focus_next == NULL) {
-//       focus_next = workspace_find_closest_floating_toplevel(output->active_workspace,
-//                                                             side);
-//     }
-//   } else {
-//     focus_next = workspace_find_closest_floating_toplevel(output->active_workspace,
-//                                                           side);
-//     /* if there are no floating toplevels we try tiled */
-//     if(focus_next == NULL) {
-//       focus_next = layout_find_closest_tiled_toplevel(output->active_workspace,
-//                                                          true, side);
-//     }
-//   }
-//
-//   server.active_workspace = workspace;
-//   ipc_broadcast_message(IPC_ACTIVE_WORKSPACE);
-//
-//   if(focus_next == NULL) {
-//     unfocus_focused_toplevel();
-//     cursor_jump_output(output);
-//   } else {
-//     focus_toplevel(focus_next);
-//     cursor_jump_focused_toplevel();
-//   }
 // }
 //
 // void
@@ -474,17 +359,6 @@ output_focus(struct state *state, struct output *output) {
 //   clock_gettime(CLOCK_MONOTONIC, &now);
 //
 //   wlr_scene_output_send_frame_done(scene_output, &now);
-// }
-//
-// void
-// output_handle_request_state(struct wl_listener *listener, void *data) {
-//   /* this function is called when the backend requests a new state for
-//    * the output. for example, wayland and X11 backends request a new mode
-//    * when the output window is resized */
-//   struct mwc_output *output = wl_container_of(listener, output, request_state);
-//   const struct wlr_output_event_request_state *event = data;
-//
-//   wlr_output_commit_state(output->wlr_output, event->state);
 // }
 //
 // void

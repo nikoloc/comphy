@@ -25,7 +25,6 @@ operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges
 void
 operation_stop_resize(struct state *state);
 
-// TODO: add whatever we need here
 void
 operation_start_drag(struct state *state);
 
@@ -34,5 +33,8 @@ operation_stop_drag(struct state *state);
 
 void
 operation_stop_whatever(struct state *state);
+
+void
+operation_tick(struct state *state);
 
 #endif

@@ -35,8 +35,14 @@ struct toplevel {
 
     struct wlr_box current, pending;
 
+    // for the toplevel we create a scene tree, which contains the whole toplevel presentation on the screen: the
+    // decorations and the content. when the toplevel is dirty we create the last snapshot of the content tree and
+    // keep it in the snapshot_tree until the client commits the new content coresponding to the desired geometry
     struct wlr_scene_tree *scene_tree;
-    struct wlr_scene_rect *scene_border;
+    struct wlr_scene_tree *content_tree;
+    struct wlr_scene_rect *border;
+
+    struct wlr_scene_tree *snapshot_tree;
 
     struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel_handle;
 

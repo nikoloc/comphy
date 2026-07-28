@@ -18,6 +18,7 @@
 // that this function should not be called from elsewhere
 struct state {
     struct wl_display *display;
+    bool is_exiting;
 
     struct wlr_output_layout *output_layout;
 
@@ -49,10 +50,11 @@ struct state {
 
     struct workspace *active_workspace;
 
-    struct toplevel *focused_toplevel;
+    struct lock_surface *focused_lock;
     struct layer *focused_layer;
     bool is_exclusive;
     struct toplevel *prev_focused;
+    struct toplevel *focused_toplevel;
 
     struct wlr_pointer_constraints_v1 *pointer_contrains_manager;
     struct wl_listener new_contraint;

@@ -5,9 +5,18 @@
 
 #include "state.h"
 
+struct output_config {
+    int x, y;
+    int width, height, refresh;
+
+    float scale;
+};
+
 struct output {
     struct wlr_output *wlr_output;
     struct wlr_scene_output *scene_output;
+    struct wlr_output_layout_output *output_layout_output;
+
     struct wlr_box full_area, usable_area;
 
     struct wl_list workspaces;
@@ -19,7 +28,9 @@ struct output {
         struct wl_list overlay;
     } layer;
 
-    struct workspace *active_workspace;
+    // when the output is created we create a dummy workspace for it to serve until the user creates a real workspace.
+    // on the creation of the first real workspace we just repace the dummy one with the new one.
+    struct workspace *active_workspace, *dummy_workspace;
 
     struct wlr_scene_rect *lock_rect;
 
@@ -32,6 +43,9 @@ struct output {
 
 struct output *
 output_create(struct state *state, struct wlr_output *wlr_output);
+
+void
+output_configure(struct state *state, struct output *output, struct output_config *config);
 
 // give focus to some view on this workspace in the general focus order; does not handle workspace switching!
 void

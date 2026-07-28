@@ -42,7 +42,7 @@ struct lock *
 lock_create(struct wlr_session_lock_v1 *wlr_lock);
 
 void
-lock_surface_focus(struct lock_surface *lock_surface);
+lock_surface_focus(struct state *state, struct lock_surface *lock_surface);
 
 void
 lock_mgr_init(struct lock_mgr *mgr, struct wl_display *display);

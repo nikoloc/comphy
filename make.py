@@ -68,6 +68,7 @@ ctx.add_source(
         "src/seat.c",
         "src/state.c",
         "src/system.c",
+        "src/view.c",
         "src/workspace.c",
         "src/xdg_shell.c",
     ]

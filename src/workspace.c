@@ -3,7 +3,6 @@
 #include <assert.h>
 #include <stdlib.h>
 
-#include "layer.h"
 #include "util/memory.h"
 
 struct workspace *
@@ -49,9 +48,7 @@ workspace_destroy(struct state *state, struct workspace *workspace) {
 }
 
 void
-workspace_show_toplevels(struct state *state, struct workspace *workspace, bool show) {
-    UNUSED(state);
-
+workspace_show_toplevels(struct workspace *workspace, bool show) {
     if(workspace->fullscreen) {
         wlr_scene_node_set_enabled(&workspace->fullscreen->scene_tree->node, show);
     }
@@ -86,9 +83,9 @@ workspace_set_active(struct state *state, struct workspace *workspace) {
 
     // else remove all the toplevels on that workspace
     struct workspace *old_workspace = workspace->output->active_workspace;
-    workspace_show_toplevels(state, old_workspace, false);
+    workspace_show_toplevels(old_workspace, false);
     // and show this workspace's toplevels
-    workspace_show_toplevels(state, workspace, true);
+    workspace_show_toplevels(workspace, true);
 
     if(state->active_workspace->output != workspace->output) {
         // if we are changing the output then warp the cursor
@@ -100,6 +97,21 @@ workspace_set_active(struct state *state, struct workspace *workspace) {
     workspace->output->active_workspace = workspace;
 
     output_focus(state, workspace->output);
+}
+
+struct workspace *
+workspace_find_by_idx(struct state *state, int idx) {
+    struct output *output;
+    wl_list_for_each(output, &state->outputs, link) {
+        struct workspace *workspace;
+        wl_list_for_each(workspace, &output->workspaces, link) {
+            if(workspace->idx == idx) {
+                return workspace;
+            }
+        }
+    }
+
+    return NULL;
 }
 
 // TODO: move to `toplevel.c`

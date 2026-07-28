@@ -5,6 +5,8 @@
 #include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 
+#include "util/ints.h"
+
 struct cursor {
     struct wlr_cursor *wlr_cursor;
     struct wlr_xcursor_manager *xcursor_mgr;
@@ -29,5 +31,11 @@ struct state;
 
 struct output *
 cursor_get_output(struct state *state);
+
+void
+cursor_set_image(struct state *state, char *image);
+
+void
+cursor_focus(struct state *state, u32 time, bool handle_keyboard_focus);
 
 #endif

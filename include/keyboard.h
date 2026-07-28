@@ -13,7 +13,9 @@ struct keyboard {
     struct wl_list link;
 };
 
+struct state;
+
 struct keyboard *
-keyboard_create(struct wlr_keyboard *wlr_keyboard);
+keyboard_create(struct state *state, struct wlr_keyboard *wlr_keyboard);
 
 #endif

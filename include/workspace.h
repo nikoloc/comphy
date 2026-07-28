@@ -32,6 +32,9 @@ void
 workspace_set_active(struct state *state, struct workspace *workspace);
 
 void
-workspace_show_toplevels(struct state *state, struct workspace *workspace, bool show);
+workspace_show_toplevels(struct workspace *workspace, bool show);
+
+struct workspace *
+workspace_find_by_idx(struct state *state, int idx);
 
 #endif
