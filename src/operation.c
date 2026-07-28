@@ -125,7 +125,6 @@ operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges
 void
 operation_stop_resize(struct state *state);
 
-// TODO: add whatever we need here
 void
 operation_start_drag(struct state *state);
 
@@ -133,4 +132,22 @@ void
 operation_stop_drag(struct state *state);
 
 void
-operation_stop_whatever(struct state *state);
+operation_stop_whatever(struct state *state) {
+}
+
+// void
+// server_reset_cursor_mode() {
+//   /* reset the cursor mode to passthrough. */
+//   server.cursor_mode = MWC_CURSOR_PASSTHROUGH;
+//   server.grabbed_toplevel->resizing = false;
+//   server.grabbed_toplevel = NULL;
+//   server.client_driven_move_resize = false;
+//
+//   if(server.client_cursor.surface != NULL) {
+//     wlr_cursor_set_surface(server.cursor, server.client_cursor.surface,
+//                            server.client_cursor.hotspot_x, server.client_cursor.hotspot_y);
+//   } else {
+//     wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, "default");
+//   }
+// }
+//
