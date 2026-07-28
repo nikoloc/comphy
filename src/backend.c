@@ -1,16 +1,29 @@
 #include "backend.h"
 
+#include <signal.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/util/log.h>
 
 #include "keyboard.h"
+#include "output.h"
 #include "pointer.h"
 #include "seat.h"
 #include "state.h"
 #include "util/ints.h"
 #include "util/macros.h"
+
+static int
+handle_sigint(int signo, void *data) {
+    UNUSED(signo), UNUSED(data);
+
+    // TODO: check if setting `state->is_exiting` is needed
+    struct state *state = state_get();
+    wl_display_terminate(state->display);
+
+    return 0;
+}
 
 bool
 backend_init(struct backend *backend, struct wl_display *display) {
@@ -44,6 +57,11 @@ backend_init(struct backend *backend, struct wl_display *display) {
         goto renderer;
     }
 
+    // add signal handlers
+    backend->sigint_source = wl_event_loop_add_signal(event_loop, SIGINT, handle_sigint, NULL);
+
+    return true;
+
 renderer:
     wlr_renderer_destroy(backend->renderer);
 backend:
@@ -54,9 +72,12 @@ err:
 
 static void
 handle_new_output(struct wl_listener *listener, void *data) {
-    UNUSED(listener), UNUSED(data);
+    UNUSED(listener);
 
-    TODO("implement");
+    struct wlr_output *wlr_output = data;
+    struct state *state = state_get();
+
+    output_create(state, wlr_output);
 }
 
 static void
@@ -64,7 +85,6 @@ handle_new_input(struct wl_listener *listener, void *data) {
     UNUSED(listener);
 
     struct wlr_input_device *device = data;
-
     struct state *state = state_get();
 
     switch(device->type) {
@@ -115,6 +135,8 @@ backend_deinit(struct backend *backend) {
     // remove listeners
     wl_list_remove(&backend->new_output.link);
     wl_list_remove(&backend->new_input.link);
+
+    wl_event_source_remove(backend->sigint_source);
 
     wlr_allocator_destroy(backend->allocator);
     wlr_renderer_destroy(backend->renderer);

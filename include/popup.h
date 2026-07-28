@@ -6,17 +6,17 @@
 #include "view.h"
 
 struct popup {
-    struct wlr_xdg_popup *xdg_popup;
-    enum view view;
+    struct wlr_xdg_popup *wlr_popup;
 
-    struct wlr_scene_tree *scene;
+    enum view view;
+    struct wlr_scene_tree *scene_tree;
 
     struct wl_listener commit;
     struct wl_listener destroy;
 };
 
 struct popup *
-popup_create(struct wlr_xdg_popup *wlr_popup);
+popup_create(struct state *state, struct wlr_xdg_popup *wlr_popup);
 
 enum view *
 popup_get_root_parent(struct popup *popup);

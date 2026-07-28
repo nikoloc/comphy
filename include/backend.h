@@ -13,6 +13,8 @@ struct backend {
     struct wlr_renderer *renderer;
     struct wlr_allocator *allocator;
 
+    struct wl_event_source *sigint_source;
+
     struct wl_listener new_output;
     struct wl_listener new_input;
 };

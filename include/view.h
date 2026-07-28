@@ -4,7 +4,7 @@
 #include <wlr/types/wlr_compositor.h>
 
 enum view {
-    VIEW_TOPLEVEL,
+    VIEW_TOPLEVEL = 1,
     VIEW_POPUP,
     VIEW_LAYER,
     VIEW_LOCK_SURFACE,

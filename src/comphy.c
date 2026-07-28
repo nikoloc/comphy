@@ -35,14 +35,14 @@
 
 void
 create_temp_dir(void) {
-    mkdir("/tmp/mwc", 0777);
+    mkdir(COMPHY_TEMP_DIR, 0777);
 }
 
 void
 init_logs(bool debug) {
     if(debug) {
         // make it so all the logs do to the log file
-        FILE *file = fopen("/tmp/mwc/logs", "w");
+        FILE *file = fopen(COMPHY_LOG_FILE, "w");
         if(file) {
             int fd = fileno(file);
             close(1);
@@ -65,6 +65,7 @@ main(int argc, char *argv[]) {
     UNUSED(argc), UNUSED(argv);
 
     create_temp_dir();
+    // TODO: fix hardcoded debug value
     init_logs(true);
 
     struct state *state = state_get();
@@ -87,6 +88,7 @@ main(int argc, char *argv[]) {
     xdg_shell_init(&state->xdg_shell, state->display);
     layer_shell_init(&state->layer_shell, state->display);
     cursor_init(&state->cursor, state->output_layout);
+    lock_mgr_init(&state->lock_mgr, state->display);
     decoration_init(&state->decoration, state->display);
     gamma_control_init(&state->gamma_control, state->display);
 

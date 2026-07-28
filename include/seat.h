@@ -6,12 +6,6 @@
 struct seat {
     struct wlr_seat *wlr_seat;
 
-    // TODO: move to operation
-    bool drag_active;
-
-    // TODO: may move to scene and add helpers for it
-    struct wlr_scene_tree *drag_icon_tree;
-
     struct wl_listener request_cursor;
     struct wl_listener request_set_selection;
     struct wl_listener request_drag;

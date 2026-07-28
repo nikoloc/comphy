@@ -3,13 +3,16 @@
 
 #include "backend.h"
 #include "config.h"
+#include "ctl.h"
 #include "cursor.h"
 #include "decoration.h"
 #include "gamma_control.h"
 #include "layer_shell.h"
+#include "lock.h"
 #include "operation.h"
 #include "scene.h"
 #include "seat.h"
+#include "util/array.h"
 #include "util/ints.h"
 #include "xdg_shell.h"
 
@@ -24,6 +27,7 @@ struct state {
 
     struct backend backend;
     struct scene scene;
+    struct ctl ctl;
 
     // interfaces we keep track of
     struct xdg_shell xdg_shell;
@@ -31,6 +35,7 @@ struct state {
     struct seat seat;
     struct decoration decoration;
     struct cursor cursor;
+    struct lock_mgr lock_mgr;
     struct gamma_control gamma_control;
     struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_manager;
 

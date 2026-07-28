@@ -3,6 +3,18 @@
 
 // here we define the desired versions of interfaces
 
+#ifndef COMPHY_TEMP_DIR
+#define COMPHY_TEMP_DIR "/tmp/comphy"
+#endif
+
+#ifndef COMPHY_LOG_FILE
+#define COMPHY_LOG_FILE COMPHY_TEMP_DIR "/logs"
+#endif
+
+#ifndef COMPHYCTL_SOCKET
+#define COMPHYCTL_SOCKET COMPHY_TEMP_DIR "/ctl"
+#endif
+
 #ifndef COMPHY_XDG_SHELL_VERSION
 #define COMPHY_XDG_SHELL_VERSION (6)
 #endif

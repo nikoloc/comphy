@@ -120,11 +120,12 @@ keyboard_create(struct state *state, struct wlr_keyboard *wlr_keyboard) {
 
     wlr_seat_set_keyboard(state->seat.wlr_seat, keyboard->wlr_keyboard);
 
-    wl_list_insert(&state->keyboards, &keyboard->link);
-
     if(!state->active_keyboard) {
         state->active_keyboard = keyboard;
     }
+
+    wl_list_insert(&state->keyboards, &keyboard->link);
+
     keyboard->modifiers.notify = handle_modifiers;
     wl_signal_add(&wlr_keyboard->events.modifiers, &keyboard->modifiers);
 
