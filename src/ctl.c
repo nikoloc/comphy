@@ -14,11 +14,9 @@
 
 #include "comphy.h"
 #include "state.h"
-#include "util/hashmap.h"
+#define ARGUMENTS_PARSER_IMPLEMENTATION
+#include "util/arguments_parser.h"
 #include "util/macros.h"
-
-// we use a hashmap for saving options for a given command
-DEFINE_HASHMAP(string_t, string_hashmap);
 
 static int
 handle_sigpipe(int signal_number, void *data) {
@@ -26,231 +24,6 @@ handle_sigpipe(int signal_number, void *data) {
 
     // do nothing
     return 0;
-}
-
-static int
-handle_command(int fd, uint32_t mask, void *data) {
-    UNUSED(data);
-
-    struct state *state = state_get();
-
-    if((mask & WL_EVENT_ERROR) || (mask & WL_EVENT_HANGUP)) {
-        wlr_log(WLR_ERROR, "error occurred on the socket");
-        ctl_deinit(&state->ctl);
-        return 0;
-    }
-
-    struct sockaddr_un client_address;
-    socklen_t sock_len;
-    int client_fd = accept(fd, (struct sockaddr *)&client_address, &sock_len);
-    if(client_fd < 0) {
-        wlr_log(WLR_ERROR, "failed to accept client");
-        return 0;
-    }
-
-    char buffer[1024];
-    ssize_t len = read(client_fd, buffer, sizeof(buffer) - 1);
-    if(len < 0) {
-        wlr_log(WLR_ERROR, "failed read on fd '%d'", client_fd);
-        close(client_fd);
-        return 0;
-    }
-
-    buffer[len] = 0;
-    handle_request(client_fd, buffer);
-
-    return 0;
-}
-
-void
-ctl_init(struct ctl *ctl, struct wl_display *display) {
-    ctl->fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if(ctl->fd < 0) {
-        wlr_log(WLR_ERROR, "failed to open a socket: %s", strerror(errno));
-        return;
-    }
-
-    struct sockaddr_un address = {0};
-    address.sun_family = AF_UNIX;
-    strcpy(address.sun_path, COMPHYCTL_SOCKET);
-
-    if(bind(ctl->fd, (struct sockaddr *)&address, sizeof(address))) {
-        wlr_log(WLR_ERROR, "failed to bind to socket: %s", strerror(errno));
-        close(ctl->fd);
-        return;
-    }
-
-    if(listen(ctl->fd, 128) < 0) {
-        wlr_log(WLR_ERROR, "ipc: failed to listen on socket: %s", strerror(errno));
-        close(ctl->fd);
-        unlink(COMPHYCTL_SOCKET);
-        return;
-    }
-
-    struct wl_event_loop *event_loop = wl_display_get_event_loop(display);
-    ctl->source = wl_event_loop_add_fd(event_loop, ctl->fd, WL_EVENT_READABLE | WL_EVENT_HANGUP | WL_EVENT_ERROR,
-            handle_command, NULL);
-}
-
-void
-ipc_deinit(struct ctl *ctl) {
-    if(ctl->has_exited) {
-        // has already exited, due to a problem, so no cleanup required
-        return;
-    }
-
-    ctl->has_exited = true;
-    wl_event_source_remove(ctl->source);
-
-    close(ctl->fd);
-    unlink(COMPHYCTL_SOCKET);
-}
-
-static void
-handle_get(int fd, char *what) {
-    if(strcmp(what, "focused_toplevel") == 0) {
-        if(server.focused_toplevel == NULL) {
-            write(fd, "null", strlen("null"));
-            return;
-        }
-
-        struct json_object *toplevel = toplevel_json(server.focused_toplevel);
-
-        size_t len;
-        const char *stringified = json_object_to_json_string_length(toplevel, JSON_C_TO_STRING_PRETTY, &len);
-
-        write(fd, stringified, len);
-
-        json_object_put(toplevel);
-    } else if(strcmp(what, "focused_layer") == 0) {
-        if(server.focused_layer_surface == NULL) {
-            write(fd, "null", strlen("null"));
-            return;
-        }
-
-        struct json_object *layer = layer_json(server.focused_layer_surface);
-
-        size_t len;
-        const char *stringified = json_object_to_json_string_length(layer, JSON_C_TO_STRING_PRETTY, &len);
-
-        write(fd, stringified, len);
-
-        json_object_put(layer);
-    } else if(strcmp(what, "active_workspace") == 0) {
-        struct json_object *workspace = workspace_json(server.active_workspace);
-
-        size_t len;
-        const char *stringified = json_object_to_json_string_length(workspace, JSON_C_TO_STRING_PRETTY, &len);
-
-        write(fd, stringified, len);
-
-        json_object_put(workspace);
-    } else if(strcmp(what, "toplevels") == 0) {
-        struct json_object *array = json_object_new_array();
-
-        struct output *iter_output;
-        wl_list_for_each(iter_output, &server.outputs, link) {
-            struct workspace *iter_workspace;
-            wl_list_for_each(iter_workspace, &iter_output->workspaces, link) {
-                struct toplevel *iter_toplevel;
-                wl_list_for_each(iter_toplevel, &iter_workspace->floating, link) {
-                    json_object_array_add(array, toplevel_json(iter_toplevel));
-                }
-                wl_list_for_each(iter_toplevel, &iter_workspace->masters, link) {
-                    json_object_array_add(array, toplevel_json(iter_toplevel));
-                }
-                wl_list_for_each(iter_toplevel, &iter_workspace->slaves, link) {
-                    json_object_array_add(array, toplevel_json(iter_toplevel));
-                }
-
-                if(iter_workspace->fullscreen != NULL) {
-                    json_object_array_add(array, toplevel_json(iter_workspace->fullscreen));
-                }
-            }
-        }
-
-        if(server.grabbed_toplevel != NULL) {
-            json_object_array_add(array, toplevel_json(server.grabbed_toplevel));
-        }
-
-        size_t len;
-        const char *stringified = json_object_to_json_string_length(array, JSON_C_TO_STRING_PRETTY, &len);
-
-        write(fd, stringified, len);
-
-        json_object_put(array);
-    } else if(strcmp(what, "layers") == 0) {
-        struct json_object *array = json_object_new_array();
-
-        struct output *iter_output;
-        wl_list_for_each(iter_output, &server.outputs, link) {
-            struct layer_surface *iter_layer;
-            for(size_t i = 0; i < 4; i++) {
-                wl_list_for_each(iter_layer, &(&iter_output->layers.background)[i], link) {
-                    json_object_array_add(array, layer_json(iter_layer));
-                }
-            }
-        }
-
-        size_t len;
-        const char *stringified = json_object_to_json_string_length(array, JSON_C_TO_STRING_PRETTY, &len);
-
-        write(fd, stringified, len);
-
-        json_object_put(array);
-    } else if(strcmp(what, "workspaces") == 0) {
-        struct json_object *array = json_object_new_array();
-
-        struct output *iter_output;
-        wl_list_for_each(iter_output, &server.outputs, link) {
-            struct workspace *iter_workspace;
-            wl_list_for_each(iter_workspace, &iter_output->workspaces, link) {
-                json_object_array_add(array, workspace_json(iter_workspace));
-            }
-        }
-
-        size_t len;
-        const char *stringified = json_object_to_json_string_length(array, JSON_C_TO_STRING_PRETTY, &len);
-
-        write(fd, stringified, len);
-
-        json_object_put(array);
-    } else if(strcmp(what, "outputs") == 0) {
-        struct json_object *array = json_object_new_array();
-
-        struct output *iter_output;
-        wl_list_for_each(iter_output, &server.outputs, link) {
-            json_object_array_add(array, output_json(iter_output));
-        }
-
-        size_t len;
-        const char *stringified = json_object_to_json_string_length(array, JSON_C_TO_STRING_PRETTY, &len);
-
-        write(fd, stringified, len);
-
-        json_object_put(array);
-    } else {
-        write(fd, "null", strlen("null"));
-    }
-
-    close(fd);
-}
-
-static void
-handle_watch(int fd, char *what) {
-    if(strcmp(what, "active_workspace") == 0) {
-        array_push(&server.ipc.watching_workspace, fd);
-        ipc_send_active_workspace();
-    } else if(strcmp(what, "focused_toplevel") == 0) {
-        array_push(&server.ipc.watching_toplevel, fd);
-        ipc_send_focused_toplevel();
-    } else if(strcmp(what, "focused_layer") == 0) {
-        array_push(&server.ipc.watching_layer, fd);
-        ipc_send_focused_layer();
-    } else {
-        write(fd, "null", strlen("null"));
-        close(fd);
-    }
 }
 
 static void
@@ -337,21 +110,108 @@ done:
     close(fd);
 }
 
-static void
-handle_request(int fd, char *buffer) {
-    char **words = parser_into_words(buffer, 0);
+static inline bool
+string_starts_with(char *str, char *prefix) {
+    while(*prefix) {
+        if(*str != *prefix) {
+            return false;
+        }
 
-    if(array_len(words) < 2) {
-        close(fd);
-    } else if(strcmp(words[0], "get") == 0) {
-        handle_get(fd, words[1]);
-    } else if(strcmp(words[0], "watch") == 0) {
-        handle_watch(fd, words[1]);
-    } else if(strcmp(words[0], "action") == 0) {
-        handle_action(fd, words[1], &words[2], array_len(words) - 2);
-    } else {
-        close(fd);
+        str++;
+        prefix++;
     }
 
-    array_destroy(words);
+    return true;
+}
+
+static void
+handle_request(int fd, char *buffer) {
+    if(string_starts_with(buffer, "create_workspace")) {
+    } else if(string_starts_with(buffer, "change_workspace")) {
+    } else if(string_starts_with(buffer, "move_to_workspace")) {
+    } else if(string_starts_with(buffer, "focus")) {
+    } else if(string_starts_with(buffer, "move")) {
+    } else if(string_starts_with(buffer, "exec")) {
+    } else if(string_starts_with(buffer, "env")) {
+    } else if(string_starts_with(buffer, "keyboard")) {
+    } else if(string_starts_with(buffer, "pointer")) {
+    } else if(string_starts_with(buffer, "trackpad")) {
+    } else if(string_starts_with(buffer, "cursor")) {
+    } else if(string_starts_with(buffer, "gaps")) {
+    } else if(string_starts_with(buffer, "border")) {
+    } else if(string_starts_with(buffer, "toplevel")) {
+    } else if(string_starts_with(buffer, "exit")) {
+    } else if(string_starts_with(buffer, "toggle_floating")) {
+    } else if(string_starts_with(buffer, "toggle_fullscreen")) {
+    } else if(string_starts_with(buffer, "toggle_fake_fullscreen")) {
+    } else if(string_starts_with(buffer, "start_move")) {
+    } else if(string_starts_with(buffer, "start_resize")) {
+    } else if(string_starts_with(buffer, "adjust_master_ratio")) {
+    } else if(string_starts_with(buffer, "create_keybind")) {
+    }
+}
+
+static int
+handle_command(int fd, uint32_t mask, void *data) {
+    UNUSED(data);
+
+    struct state *state = state_get();
+
+    struct sockaddr_un client_address;
+    socklen_t sock_len;
+    int client_fd = accept(fd, (struct sockaddr *)&client_address, &sock_len);
+    if(client_fd < 0) {
+        wlr_log(WLR_ERROR, "failed to accept client");
+        return 0;
+    }
+
+    char buffer[1024];
+    ssize_t len = read(client_fd, buffer, sizeof(buffer) - 1);
+    if(len < 0) {
+        wlr_log(WLR_ERROR, "failed read on fd '%d'", client_fd);
+        close(client_fd);
+        return 0;
+    }
+
+    buffer[len] = 0;
+    handle_request(client_fd, buffer);
+
+    return 0;
+}
+
+void
+ctl_init(struct ctl *ctl, struct wl_display *display) {
+    ctl->fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if(ctl->fd < 0) {
+        wlr_log(WLR_ERROR, "failed to open a socket: %s", strerror(errno));
+        return;
+    }
+
+    struct sockaddr_un address = {0};
+    address.sun_family = AF_UNIX;
+    strcpy(address.sun_path, COMPHYCTL_SOCKET);
+
+    if(bind(ctl->fd, (struct sockaddr *)&address, sizeof(address))) {
+        wlr_log(WLR_ERROR, "failed to bind to socket: %s", strerror(errno));
+        close(ctl->fd);
+        return;
+    }
+
+    if(listen(ctl->fd, 128) < 0) {
+        wlr_log(WLR_ERROR, "ipc: failed to listen on socket: %s", strerror(errno));
+        close(ctl->fd);
+        unlink(COMPHYCTL_SOCKET);
+        return;
+    }
+
+    struct wl_event_loop *event_loop = wl_display_get_event_loop(display);
+    ctl->source = wl_event_loop_add_fd(event_loop, ctl->fd, WL_EVENT_READABLE, handle_command, NULL);
+}
+
+void
+ipc_deinit(struct ctl *ctl) {
+    wl_event_source_remove(ctl->source);
+
+    close(ctl->fd);
+    unlink(COMPHYCTL_SOCKET);
 }

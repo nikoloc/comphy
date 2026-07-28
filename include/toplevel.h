@@ -74,4 +74,7 @@ toplevel_set_fullscreen(struct state *state, struct toplevel *toplevel, bool set
 struct output *
 toplevel_float_largest_output_intersection(struct state *state, struct toplevel *toplevel);
 
+void
+toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace);
+
 #endif

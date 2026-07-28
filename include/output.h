@@ -51,11 +51,11 @@ output_configure(struct state *state, struct output *output, struct output_confi
 void
 output_focus(struct state *state, struct output *output);
 
-// struct wlr_box
-// output_add_to_layout(struct output *output, struct output_config *config);
-//
-// bool
-// output_initialize(struct wlr_output *output, struct output_config *config);
+struct output *
+output_get_relative(struct state *state, struct output *output, enum wlr_direction direction);
+
+struct output *
+output_find_by_name(struct state *state, char *name);
 
 bool
 output_transfer_existing_workspaces(struct state *state, struct output *output);
@@ -67,9 +67,6 @@ output_find_owned_workspace(struct state *state, struct output *output);
 
 bool
 output_apply_preffered_mode(struct wlr_output *wlr_output, struct wlr_output_state *state);
-
-struct output *
-output_get_relative(struct state *state, struct output *output, enum wlr_direction direction);
 
 void
 output_warp_cursor(struct state *state, struct output *output);

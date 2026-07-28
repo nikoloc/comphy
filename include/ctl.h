@@ -4,8 +4,6 @@
 #include <wayland-server-core.h>
 
 struct ctl {
-    bool has_exited;
-
     int fd;
     struct wl_event_source *source;
 };

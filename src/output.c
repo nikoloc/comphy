@@ -293,6 +293,18 @@ output_focus(struct state *state, struct output *output) {
     }
 }
 
+struct output *
+output_find_by_name(struct state *state, char *name) {
+    struct output *iter;
+    wl_list_for_each(iter, &state->outputs, link) {
+        if(strcmp(iter->wlr_output->name, name) == 0) {
+            return iter;
+        }
+    }
+
+    return NULL;
+}
+
 // bool
 // output_transfer_existing_workspaces(struct mwc_output *output) {
 //   /* if this output is reconnected then its workspaces are on some other monitor,
