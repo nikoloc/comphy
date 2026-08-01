@@ -26,7 +26,7 @@
 #endif
 
 #define UNUSED(x) ((void)(x))
-#define TODO(x) ASSERT(0 && x)
+#define TODO(x) (ASSERT(0 && x))
 #define UNREACHABLE() (__builtin_unreachable())
 
 #define CONTAINER_OF(ptr, type, member) (type *)((char *)(ptr) - offsetof(type, member))

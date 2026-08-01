@@ -1,6 +1,7 @@
 #include "xdg_shell.h"
 
 #include "comphy.h"
+#include "popup.h"
 #include "state.h"
 #include "util/macros.h"
 
@@ -15,6 +16,11 @@ handle_new_toplevel(struct wl_listener *listener, void *data) {
 
 static void
 handle_new_popup(struct wl_listener *listener, void *data) {
+    UNUSED(listener);
+
+    struct wlr_xdg_popup *wlr_popup = data;
+    struct state *state = state_get();
+    popup_create(state, wlr_popup);
 }
 
 static void

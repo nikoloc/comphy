@@ -7,22 +7,23 @@
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
 
-#include "config.h"
 #include "state.h"
 #include "util/macros.h"
 #include "util/memory.h"
 
-bool
-keyboard_configure(struct state *state, struct keyboard *keyboard) {
+void
+keyboard_configure(struct keyboard *keyboard, int rate, int delay, char *xkb_layouts, char *xkb_variants,
+        char *xkb_options) {
     struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     if(!context) {
-        return false;
+        wlr_log(WLR_ERROR, "could not create xkb context");
+        return;
     }
 
     struct xkb_rule_names rule_names = {
-            .layout = string_c_string_view(&state->config.keymap_layouts),
-            .variant = string_c_string_view(&state->config.keymap_variants),
-            .options = string_c_string_view(&state->config.keymap_options),
+            .layout = xkb_layouts,
+            .variant = xkb_variants,
+            .options = xkb_options,
     };
 
     struct xkb_keymap *keymap = xkb_keymap_new_from_names(context, &rule_names, XKB_KEYMAP_COMPILE_NO_FLAGS);
@@ -32,7 +33,8 @@ keyboard_configure(struct state *state, struct keyboard *keyboard) {
         keymap = xkb_keymap_new_from_names(context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
         if(keymap) {
             wlr_log(WLR_ERROR, "could not apply the default configuration to the keyboard");
-            return false;
+            xkb_context_unref(context);
+            return;
         }
     }
 
@@ -40,11 +42,7 @@ keyboard_configure(struct state *state, struct keyboard *keyboard) {
     xkb_keymap_unref(keymap);
     xkb_context_unref(context);
 
-    int rate = state->config.keyboard_rate;
-    int delay = state->config.keyboard_delay;
     wlr_keyboard_set_repeat_info(keyboard->wlr_keyboard, rate, delay);
-
-    return true;
 }
 
 static void
@@ -110,16 +108,15 @@ handle_destroy(struct wl_listener *listener, void *data) {
 
 struct keyboard *
 keyboard_create(struct state *state, struct wlr_keyboard *wlr_keyboard) {
-    struct keyboard *keyboard = ALLOCATE(struct keyboard);
-
+    struct keyboard *keyboard = ALLOC(struct keyboard);
     keyboard->wlr_keyboard = wlr_keyboard;
     wlr_keyboard->data = keyboard;
 
-    // TODO: handle failure
-    keyboard_configure(state, keyboard);
+    keyboard_configure(keyboard, state->config.keyboard.rate, state->config.keyboard.delay,
+            state->config.keyboard.xkb_layouts, state->config.keyboard.xkb_variants,
+            state->config.keyboard.xkb_options);
 
     wlr_seat_set_keyboard(state->seat.wlr_seat, keyboard->wlr_keyboard);
-
     if(!state->active_keyboard) {
         state->active_keyboard = keyboard;
     }

@@ -1,27 +1,37 @@
-create_workspace [--output <output: string>] <idx: int32>
-change_workspace <idx: int32>
-move_to_workspace <idx: int32>
+create_workspace [--output <output: string>] <idx: int>
+change_workspace <idx: int>
+move_to_workspace <idx: int>
 focus <direction: "up" "right" "down" "left">
 move <direction: "up" "right" "down" "left">
 exec <cmd: string>
 env <name: string> <value: string>
-keyboard [--rate <value: int32>] [--delay <value: int32>] [--xkb_layouts <xkd_layouts_string: string>]
-    [--xkb_variants <xkd_variants_string: string>] [--xkb_options <xkd_options_string: string>]
-pointer [--name <name: string>] [--sensitivity <sensitivity: float>] [--acceleration] [--left_handed]
-trackpad [--disable_while_typing] [--natural_scroll] [--scroll_method <value: "none" "two fingers" "edge">]
-cursor [--theme <theme: string>] [--size <size: int32>] [--warp_on_output_change] [--hide-after <value: int32>]
-gaps [--smart] [--outer <value: int32>] [--inner <value: int32>]
-border [--width <width: int32>] [--color <color: hex_color>] [--color_active <color: hex_color>]
-    [--color_inactive <color: hex_color>]
-toplevel [--app_id <app_id: string>] [--title <title: string>] [--client_side_decorations]
-    [--opacity <value: float>] [--opacity_active <value: float>] [--opacity_inactive: value: float]
-    [--default_state <value: "float" "tiled"] [--default_width <value: int32>]
-    [--default_height <value: int32>]
 exit
-toggle_floating
+toggle_float
 toggle_fullscreen
 toggle_fake_fullscreen
 start_move
 start_resize
-adjust_master_ratio <value: float>
+
+repeat_rate <rate: int> <delay: int>
+keymap <xkb_layouts: string> <xkb_variants: string> <xkb_options: string>
+trackpad_disable_while_typing <value: "on" "off">
+trackpad_natural_scroll <value: "on" "off">
+trackpad_scroll_method <value: "none" "two_fingers" "edge" "on_button_down">
+cursor_theme <theme: string> <size: int>
+cursor_warp <value: "none" "on_output_change" "on_focus_change">
+cursor_hide_after_ms <value: int>
+gaps <outer: int> <inner: int>
+smart_gaps <value: "on" "off">
+border_width <value: int>
+border_color <active: color> <inactive: color>
+master_ratio [--adjust] <value: float>
+
+pointer_rule [--name <name: string>] [--sensitivity <sensitivity: float>]
+    [--acceleration <value: "on" "off">] [--left_handed <value: "on" "off">]
+toplevel_rule [--app_id <app_id: string>] [--title <title: string>] [--floats <value: "on" "off">]
+    [--client_side_decorations <value: "on" "off">] [--opacity <value: float>]
+    [--opacity_active <value: float>] [--opacity_inactive: value: float]
+    [--default_state <value: "float" "tiled"] [--default_width <value: int>]
+    [--default_height <value: int>]
+
 create_keybind [--even_when_locked] <modifiers: string> <key: string> <cmd: string>

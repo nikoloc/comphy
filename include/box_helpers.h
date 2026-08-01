@@ -23,4 +23,12 @@ wlr_box_same_relative_position(struct wlr_box *old, struct wlr_box *new, int *x,
     *y = new->y + relative_y *new->height;
 }
 
+static inline void
+wlr_box_remove_gaps(struct wlr_box *box, int gaps) {
+    box->x += gaps;
+    box->y += gaps;
+    box->width -= 2 * gaps;
+    box->height -= 2 * gaps;
+}
+
 #endif

@@ -12,7 +12,6 @@
 #include "operation.h"
 #include "scene.h"
 #include "seat.h"
-#include "util/array.h"
 #include "util/ints.h"
 #include "xdg_shell.h"
 

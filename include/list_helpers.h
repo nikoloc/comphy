@@ -51,4 +51,14 @@ wl_list_last(struct wl_list *list) {
     return list->prev;
 }
 
+static inline bool
+wl_list_is_first(struct wl_list *list, struct wl_list *elem) {
+    return elem->prev == list;
+}
+
+static inline bool
+wl_list_is_last(struct wl_list *list, struct wl_list *elem) {
+    return elem->next == list;
+}
+
 #endif

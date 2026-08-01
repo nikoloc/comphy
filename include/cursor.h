@@ -36,6 +36,16 @@ void
 cursor_set_image(struct state *state, char *image);
 
 void
-cursor_focus(struct state *state, u32 time, bool handle_keyboard_focus);
+cursor_focus(struct state *state, u32 time_ms, bool handle_keyboard_focus);
+
+// this needs to take the cursor since it is also called from the init function
+void
+cursor_set_theme(struct cursor *cursor, char *theme, int size);
+
+void
+cursor_warp_focused_toplevel(struct state *state);
+
+void
+cursor_warp_output(struct state *state, struct output *output);
 
 #endif

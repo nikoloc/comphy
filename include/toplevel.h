@@ -34,6 +34,7 @@ struct toplevel {
     double active_opacity;
 
     struct wlr_box current, pending;
+    bool needs_centering;
 
     // for the toplevel we create a scene tree, which contains the whole toplevel presentation on the screen: the
     // decorations and the content. when the toplevel is dirty we create the last snapshot of the content tree and
@@ -67,6 +68,9 @@ toplevel_create(struct state *state, struct wlr_xdg_toplevel *wlr_toplevel);
 
 void
 toplevel_focus(struct state *state, struct toplevel *toplevel);
+
+void
+toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_box *box);
 
 void
 toplevel_set_fullscreen(struct state *state, struct toplevel *toplevel, bool set);

@@ -18,4 +18,8 @@ struct state;
 struct keyboard *
 keyboard_create(struct state *state, struct wlr_keyboard *wlr_keyboard);
 
+void
+keyboard_configure(struct keyboard *keyboard, int rate, int delay, char *xkb_layouts, char *xkb_variants,
+        char *xkb_options);
+
 #endif

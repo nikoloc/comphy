@@ -1,10 +1,12 @@
 #include "operation.h"
 
+#include <wlr/util/log.h>
+
 #include "layout.h"
 #include "list_helpers.h"
 #include "state.h"
 #include "util/macros.h"
-#include "wlr/util/log.h"
+#include "util/time_util.h"
 #include "workspace.h"
 
 void
@@ -81,14 +83,22 @@ insert_layout_at_cursor(struct state *state, struct toplevel *toplevel) {
     }
 }
 
+static void
+stop_shared(struct state *state) {
+    state->operation = OPERATION_NONE;
+    state->grabbed_toplevel = NULL;
+
+    // clear the focus and then give it immediatelly so the client requests a new cursor image, since the server might
+    // have been the one who initialized this action and who set its own cursor image
+    wlr_seat_pointer_clear_focus(state->seat.wlr_seat);
+    cursor_focus(state, time_now_ms(), false);
+}
+
 void
 operation_stop_move(struct state *state) {
     ASSERT(state->operation == OPERATION_MOVE);
 
-    state->operation = OPERATION_NONE;
-
     struct toplevel *toplevel = state->grabbed_toplevel;
-    state->grabbed_toplevel = NULL;
 
     // reinsert the toplevel. NOTE: for floating we take the largest intersection output. for tiled we insert it into
     // the layout at the cursor position
@@ -117,37 +127,149 @@ operation_stop_move(struct state *state) {
         // return it to the tiled tree
         wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.tiled);
     }
+
+    stop_shared(state);
 }
 
 void
-operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges);
+operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges) {
+    if(state->grabbed_toplevel || toplevel->state != TOPLEVEL_STATE_FLOAT) {
+        return;
+    }
+
+    state->operation = OPERATION_RESIZE;
+    state->grabbed_toplevel = toplevel;
+    state->grab_x = state->cursor.wlr_cursor->x;
+    state->grab_y = state->cursor.wlr_cursor->y;
+    state->grabbed_toplevel_initial_box = toplevel->current;
+    state->resize_edges = edges;
+}
 
 void
-operation_stop_resize(struct state *state);
+operation_stop_resize(struct state *state) {
+    struct toplevel *toplevel = state->grabbed_toplevel;
+    struct output *largest_output = toplevel_float_largest_output_intersection(state, toplevel);
+
+    if(largest_output != toplevel->workspace->output) {
+        toplevel->workspace = largest_output->active_workspace;
+        wl_list_remove(&toplevel->link);
+        wl_list_insert(&largest_output->active_workspace->floats, &toplevel->link);
+    }
+
+    stop_shared(state);
+}
 
 void
-operation_start_drag(struct state *state);
+operation_start_drag(struct state *state) {
+    // TODO:
+    UNUSED(state);
+}
 
 void
-operation_stop_drag(struct state *state);
+operation_stop_drag(struct state *state) {
+    // TODO:
+    UNUSED(state);
+}
 
 void
 operation_stop_whatever(struct state *state) {
+    switch(state->operation) {
+        case OPERATION_NONE: {
+            break;
+        }
+        case OPERATION_MOVE: {
+            operation_stop_move(state);
+            break;
+        }
+        case OPERATION_RESIZE: {
+            operation_stop_resize(state);
+            break;
+        }
+        case OPERATION_DRAG: {
+            operation_stop_drag(state);
+            break;
+        }
+    }
 }
 
-// void
-// server_reset_cursor_mode() {
-//   /* reset the cursor mode to passthrough. */
-//   server.cursor_mode = MWC_CURSOR_PASSTHROUGH;
-//   server.grabbed_toplevel->resizing = false;
-//   server.grabbed_toplevel = NULL;
-//   server.client_driven_move_resize = false;
-//
-//   if(server.client_cursor.surface != NULL) {
-//     wlr_cursor_set_surface(server.cursor, server.client_cursor.surface,
-//                            server.client_cursor.hotspot_x, server.client_cursor.hotspot_y);
-//   } else {
-//     wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, "default");
-//   }
-// }
-//
+static void
+move(struct state *state) {
+    struct toplevel *toplevel = state->grabbed_toplevel;
+
+    struct wlr_box box = {
+            .x = state->grabbed_toplevel_initial_box.x + (state->cursor.wlr_cursor->x - state->grab_x),
+            .y = state->grabbed_toplevel_initial_box.y + (state->cursor.wlr_cursor->y - state->grab_y),
+            .width = toplevel->current.width,
+            .height = toplevel->current.height,
+    };
+
+    toplevel_configure(state, toplevel, &box);
+}
+
+static void
+resize(struct state *state) {
+    struct toplevel *toplevel = state->grabbed_toplevel;
+
+    struct wlr_box initial = state->grabbed_toplevel_initial_box;
+    struct wlr_box box = state->grabbed_toplevel_initial_box;
+
+    int cursor_x = state->cursor.wlr_cursor->x;
+    int cursor_y = state->cursor.wlr_cursor->y;
+
+    int grab_x = state->grab_x;
+    int grab_y = state->grab_y;
+
+    int min_width = MAX(toplevel->wlr_toplevel->current.min_width, 10);
+    int min_height = MAX(toplevel->wlr_toplevel->current.min_height, 10);
+
+    if(state->resize_edges & WLR_EDGE_TOP) {
+        box.y = initial.y + (cursor_y - grab_y);
+        box.height = initial.height - (cursor_y - grab_y);
+        if(box.height <= min_height) {
+            box.y = initial.y + initial.height - min_height;
+            box.height = min_height;
+        }
+    } else if(state->resize_edges & WLR_EDGE_BOTTOM) {
+        box.y = initial.y;
+        box.height = initial.height + (cursor_y - grab_y);
+        if(box.height <= min_height) {
+            box.height = min_height;
+        }
+    }
+
+    if(state->resize_edges & WLR_EDGE_LEFT) {
+        box.x = initial.x + (cursor_x - grab_x);
+        box.width = initial.width - (cursor_x - grab_x);
+        if(box.width <= min_width) {
+            box.x = initial.x + initial.width - min_width;
+            box.width = min_width;
+        }
+    } else if(state->resize_edges & WLR_EDGE_RIGHT) {
+        box.x = initial.x;
+        box.width = initial.width + (cursor_x - grab_x);
+        if(box.width <= min_width) {
+            box.width = min_width;
+        }
+    }
+
+    toplevel_configure(state, toplevel, &box);
+}
+
+void
+operation_tick(struct state *state) {
+    switch(state->operation) {
+        case OPERATION_NONE: {
+            break;
+        }
+        case OPERATION_MOVE: {
+            move(state);
+        }
+        case OPERATION_RESIZE: {
+            resize(state);
+        }
+        case OPERATION_DRAG: {
+            // TODO: implement
+            // drag(state);
+        } break;
+    }
+}

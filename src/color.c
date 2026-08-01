@@ -19,7 +19,7 @@ color_from_hex(char *s, color_t *dest) {
         dest->r = r;
         dest->g = g;
         dest->b = b;
-        dest->a = UINT8_MAX;
+        dest->a = 255;
 
         return true;
     } else {

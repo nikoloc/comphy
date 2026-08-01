@@ -7,6 +7,7 @@
 #include "output.h"
 #include "state.h"
 #include "util/macros.h"
+#include "util/time_util.h"
 #include "view.h"
 
 void
@@ -15,7 +16,7 @@ cursor_set_image(struct state *state, char *image) {
 }
 
 void
-cursor_focus(struct state *state, u32 time, bool handle_keyboard_focus) {
+cursor_focus(struct state *state, u32 time_ms, bool handle_keyboard_focus) {
     double sx, sy;
     struct wlr_surface *surface = NULL;
     enum view *view = view_at(state, state->cursor.wlr_cursor->x, state->cursor.wlr_cursor->y, &surface, &sx, &sy);
@@ -42,7 +43,7 @@ cursor_focus(struct state *state, u32 time, bool handle_keyboard_focus) {
     // }
 
     wlr_seat_pointer_notify_enter(state->seat.wlr_seat, surface, sx, sy);
-    wlr_seat_pointer_notify_motion(state->seat.wlr_seat, time, sx, sy);
+    wlr_seat_pointer_notify_motion(state->seat.wlr_seat, time_ms, sx, sy);
 }
 
 static void
@@ -174,22 +175,30 @@ handle_request_set_shape(struct wl_listener *listener, void *data) {
 }
 
 void
+cursor_set_theme(struct cursor *cursor, char *theme, int size) {
+    if(cursor->xcursor_mgr) {
+        wlr_xcursor_manager_destroy(cursor->xcursor_mgr);
+        cursor->xcursor_mgr = NULL;
+    }
+
+    cursor->xcursor_mgr = wlr_xcursor_manager_create(theme, size);
+
+    // also set envirorment variables
+    char cursor_size[8];
+    snprintf(cursor_size, sizeof(cursor_size), "%d", size);
+    cursor_size[7] = 0;
+
+    setenv("XCURSOR_SIZE", cursor_size, true);
+    setenv("XCURSOR_THEME", theme, true);
+}
+
+void
 cursor_init(struct cursor *cursor, struct wlr_output_layout *output_layout) {
     cursor->wlr_cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(cursor->wlr_cursor, output_layout);
 
-    // TODO: figure out how we should handle the default cursor_theme
-    // cursor->xcursor_mgr = wlr_xcursor_manager_create(server.config->cursor_theme, server.config->cursor_size);
-
-    // TODO: move this to the post init part, or ipc
-    // char cursor_size[8];
-    // snprintf(cursor_size, sizeof(cursor_size), "%u", server.config->cursor_size);
-    // cursor_size[7] = 0;
-    // setenv("XCURSOR_SIZE", cursor_size, true);
-    //
-    // if(server.config->cursor_theme != NULL) {
-    //     setenv("XCURSOR_THEME", server.config->cursor_theme, true);
-    // }
+    // TODO: is there a default theme with no manager or we need to set it?
+    // cursor_set_theme();
 
     cursor->motion.notify = handle_motion;
     wl_signal_add(&cursor->wlr_cursor->events.motion, &cursor->motion);
@@ -241,4 +250,23 @@ cursor_get_output(struct state *state) {
 
     struct output *output = wlr_output->data;
     return output;
+}
+
+void
+cursor_warp_focused_toplevel(struct state *state) {
+    struct toplevel *toplevel = state->focused_toplevel;
+    if(!toplevel) {
+        return;
+    }
+
+    wlr_cursor_warp(state->cursor.wlr_cursor, NULL, toplevel->current.x + toplevel->current.width / 2.0f,
+            toplevel->current.y + toplevel->current.height / 2.0);
+    cursor_focus(state, time_now_ms(), false);
+}
+
+void
+cursor_warp_output(struct state *state, struct output *output) {
+    wlr_cursor_warp(state->cursor.wlr_cursor, NULL, output->full_area.x + output->full_area.width / 2.0f,
+            output->full_area.y + output->full_area.height / 2.0);
+    cursor_focus(state, time_now_ms(), false);
 }

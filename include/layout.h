@@ -6,11 +6,13 @@
 #include "workspace.h"
 
 void
-layout_configure(struct state *state, struct workspace *workspace);
+layout_add(struct workspace *workspace, struct toplevel *toplevel);
 
-// t2 needs to be after t1 if in the same list (both slaves)
 void
-layout_swap(struct toplevel *t1, struct toplevel *t2);
+layout_remove(struct toplevel *toplevel);
+
+void
+layout_configure(struct state *state, struct workspace *workspace);
 
 struct toplevel *
 layout_toplevel_at(struct workspace *workspace, int x, int y);

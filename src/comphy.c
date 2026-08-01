@@ -31,14 +31,16 @@
 #include "scene.h"
 #include "seat.h"
 #include "state.h"
+#include "system.h"
+#include "util/dstring.h"
 #include "util/macros.h"
 
-void
+static void
 create_temp_dir(void) {
     mkdir(COMPHY_TEMP_DIR, 0777);
 }
 
-void
+static void
 init_logs(bool debug) {
     if(debug) {
         // make it so all the logs do to the log file
@@ -58,6 +60,31 @@ init_logs(bool debug) {
     } else {
         wlr_log_init(WLR_INFO, NULL);
     }
+}
+
+static bool
+get_init_script_path(string_t *dest) {
+    char *path = getenv("COMPHY_INIT_SCRIPT");
+    if(path) {
+        string_init(dest, path);
+        return true;
+    }
+
+    char *dir = getenv("XDG_CONFIG_HOME");
+    if(dir) {
+        string_init(dest, dir);
+        string_append_c_string(dest, "/comphy/init");
+        return true;
+    }
+
+    dir = getenv("HOME");
+    if(dir) {
+        string_init(dest, dir);
+        string_append_c_string(dest, "/.config/comphy/init");
+        return true;
+    }
+
+    return false;
 }
 
 int
@@ -84,6 +111,7 @@ main(int argc, char *argv[]) {
     state->output_layout = wlr_output_layout_create(state->display);
 
     scene_init(&state->scene, state->output_layout);
+    ctl_init(&state->ctl, state->display);
     seat_init(&state->seat, state->display);
     xdg_shell_init(&state->xdg_shell, state->display);
     layer_shell_init(&state->layer_shell, state->display);
@@ -134,6 +162,13 @@ main(int argc, char *argv[]) {
     }
 
     setenv("WAYLAND_DISPLAY", socket, true);
+
+    // execute the init script and start the event loop. TODO: will this work, or why have to time it better?
+    string_t init = {0};
+    if(get_init_script_path(&init)) {
+        shell(string_c_string_view(&init));
+    }
+
     wlr_log(WLR_INFO, "running 'comphy' on socket '%s'", socket);
     wl_display_run(state->display);
 

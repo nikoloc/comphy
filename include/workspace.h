@@ -13,7 +13,7 @@ struct workspace {
     struct output *output;
     // in case this workspaces output gets unplugged and then plugged again we use this info to return it to its
     // original output
-    string_t original_output_name;
+    char *original_output_name;
 
     struct toplevel *master;
     struct wl_list slaves, floats;

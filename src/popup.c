@@ -67,7 +67,9 @@ handle_destroy(struct wl_listener *listener, void *data) {
 
 struct popup *
 popup_create(struct state *state, struct wlr_xdg_popup *wlr_popup) {
-    struct popup *popup = ALLOCATE(struct popup);
+    UNUSED(state);
+
+    struct popup *popup = ALLOC(struct popup);
     popup->wlr_popup = wlr_popup;
     wlr_popup->base->data = popup;
 
@@ -104,11 +106,11 @@ enum view *
 popup_get_root_parent(struct popup *popup) {
     struct wlr_scene_tree *tree = popup->scene_tree;
 
-    struct mwc_something *something = tree->node.data;
-    while(something == NULL || something->type == MWC_POPUP) {
+    enum view *view = tree->node.data;
+    while(!view || *view == VIEW_POPUP) {
         tree = tree->node.parent;
-        something = tree->node.data;
+        view = tree->node.data;
     }
 
-    return something;
+    return view;
 }

@@ -162,7 +162,7 @@ handle_destroy(struct wl_listener *listener, void *data) {
 
 struct output *
 output_create(struct state *state, struct wlr_output *wlr_output) {
-    struct output *output = ALLOCATE(struct output);
+    struct output *output = ALLOC(struct output);
     output->wlr_output = wlr_output;
     wlr_output->data = output;
 
@@ -336,83 +336,5 @@ output_find_by_name(struct state *state, char *name) {
 //
 //   return found;
 //
-// }
-//
-// void
-// cursor_jump_output(struct mwc_output *output) {
-//   struct wlr_box output_box;
-//   wlr_output_layout_get_box(server.output_layout, output->wlr_output, &output_box);
-//
-//   wlr_cursor_warp(server.cursor, NULL,
-//                   output_box.x + output_box.width / 2.0,
-//                   output_box.y + output_box.height / 2.0);
-//
-//   struct timespec now;
-//   clock_gettime(CLOCK_MONOTONIC, &now);
-//
-//   pointer_handle_focus(now.tv_sec * 1000 + now.tv_nsec / 1000, false);
-// }
-//
-// void
-// output_handle_frame(struct wl_listener *listener, void *data) {
-//   /* this function is called every time an output is ready to display a frame,
-//    * generally at the output's refresh rate */
-//   struct mwc_output *output = wl_container_of(listener, output, frame);
-//   struct mwc_workspace *workspace = output->active_workspace;
-//
-//   workspace_draw_frame(workspace);
-//
-//   struct wlr_scene_output *scene_output = wlr_scene_get_scene_output(server.scene,
-//                                                                      output->wlr_output);
-//
-//   wlr_scene_output_commit(scene_output, NULL);
-//
-//   struct timespec now;
-//   clock_gettime(CLOCK_MONOTONIC, &now);
-//
-//   wlr_scene_output_send_frame_done(scene_output, &now);
-// }
-//
-// void
-// output_handle_destroy(struct wl_listener *listener, void *data) {
-//   struct mwc_output *output = wl_container_of(listener, output, destroy);
-//
-//   /* we want to transfer all the workspaces to a new output;
-//    * if this was the only output then idk what to do honestly, maybe have a temporary
-//    * stash thats going to hold them until some output is attached again? TODO */
-//   if(server.running) {
-//     struct wl_list *next = output->link.next;
-//     if(next == &server.outputs) {
-//       next = output->link.prev;
-//     }
-//
-//     if(next != &server.outputs) {
-//       struct mwc_output *new = wl_container_of(next, new, link);
-//       bool valid_focus = server.focused_toplevel != NULL
-//         && server.focused_toplevel->workspace->output != output;
-//       if(!valid_focus) {
-//         focus_output(new, MWC_LEFT);
-//       }
-//
-//       struct mwc_workspace *w, *tmp;
-//       wl_list_for_each_safe(w, tmp, &output->workspaces, link) {
-//         w->output = new;
-//         wl_list_remove(&w->link);
-//         wl_list_insert(&new->workspaces, &w->link);
-//         layout_set_pending_state(w);
-//       }
-//     }
-//   }
-//
-//   if(output->session_lock_rect != NULL) {
-//     wlr_scene_node_destroy(&output->session_lock_rect->node);
-//   }
-//
-//   wl_list_remove(&output->frame.link);
-//   wl_list_remove(&output->request_state.link);
-//   wl_list_remove(&output->destroy.link);
-//   wl_list_remove(&output->link);
-//
-//   free(output);
 // }
 //

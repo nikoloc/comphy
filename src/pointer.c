@@ -11,15 +11,10 @@
 #include <wlr/util/region.h>
 
 #include "config.h"
-#include "dnd.h"
-#include "keybinds.h"
-#include "layer.h"
-#include "layout.h"
-#include "output.h"
+#include "state.h"
 #include "toplevel.h"
 #include "util/macros.h"
 #include "util/memory.h"
-#include "workspace.h"
 
 void
 handle_destroy(struct wl_listener *listener, void *data) {
@@ -33,7 +28,7 @@ handle_destroy(struct wl_listener *listener, void *data) {
 
 struct pointer *
 pointer_create(struct state *state, struct wlr_pointer *wlr_pointer) {
-    struct pointer *pointer = ALLOCATE(struct pointer);
+    struct pointer *pointer = ALLOC(struct pointer);
 
     pointer->wlr_pointer = wlr_pointer;
     wlr_pointer->data = pointer;
@@ -50,77 +45,107 @@ pointer_create(struct state *state, struct wlr_pointer *wlr_pointer) {
     return pointer;
 }
 
-// bool
-// pointer_configure(struct mwc_pointer *pointer) {
-//   if(!wlr_input_device_is_libinput(&pointer->wlr_pointer->base)) return false;
-// wlr_log(WLR_ERROR, "could not configure pointer device");
-//
-//   struct libinput_device *device = wlr_libinput_get_device_handle(&pointer->wlr_pointer->base);
-//   libinput_device_ref(device);
-//   pointer->name = libinput_device_get_name(device);
-//
-//   enum libinput_config_accel_profile accel;
-//   double sensitivity;
-//   /* we configure accelation and sensitivity of the pointer by
-//    * first looking at specific pointer configurations */
-//   bool found = false;
-//   struct pointer_config *p;
-//   wl_list_for_each(p, &server.config->pointers, link) {
-//     if(strcmp(p->name, pointer->name) == 0) {
-//       accel = p->acceleration;
-//       sensitivity = p->sensitivity;
-//       found = true;
-//       break;
-//     }
-//   }
-//
-//   if(!found) {
-//     accel = server.config->pointer_acceleration;
-//     sensitivity = server.config->pointer_sensitivity;
-//   }
-//
-//   if(libinput_device_config_accel_is_available(device)) {
-//     if(libinput_device_config_accel_set_speed(device, sensitivity)
-//        != LIBINPUT_CONFIG_STATUS_SUCCESS) {
-//       wlr_log(WLR_ERROR, "applying sensitivity to device '%s' failed", pointer->name);
-//     }
-//
-//     if(accel) {
-//       struct libinput_config_accel *accel_config = libinput_config_accel_create(accel);
-//       if(libinput_device_config_accel_apply(device, accel_config)
-//          != LIBINPUT_CONFIG_STATUS_SUCCESS) {
-//         wlr_log(WLR_ERROR, "applying acceleration profile to device '%s' failed", pointer->name);
-//       }
-//       libinput_config_accel_destroy(accel_config);
-//     }
-//   }
-//
-//   /* check if trackpad */
-//   if(libinput_device_config_tap_get_finger_count(device) > 0) {
-//     /* then apply trackpad specific settings */
-//     if(libinput_device_config_tap_set_enabled(device, server.config->trackpad_tap_to_click)
-//        != LIBINPUT_CONFIG_STATUS_SUCCESS) {
-//       wlr_log(WLR_ERROR, "applying tap to click to device '%s' failed", pointer->name);
-//     }
-//
-//     if(libinput_device_config_scroll_set_natural_scroll_enabled(device,
-//        server.config->trackpad_natural_scroll) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
-//       wlr_log(WLR_ERROR, "applying natural scroll to device '%s' failed", pointer->name);
-//     }
-//
-//     if(libinput_device_config_scroll_set_method(device, server.config->trackpad_scroll_method)
-//        != LIBINPUT_CONFIG_STATUS_SUCCESS) {
-//       wlr_log(WLR_ERROR, "applying scroll method to device '%s' failed", pointer->name);
-//     }
-//
-//     if(libinput_device_config_dwt_set_enabled(device,
-//        server.config->trackpad_disable_while_typing) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
-//       wlr_log(WLR_ERROR, "applying disable while typing to device '%s' failed", pointer->name);
-//     }
-//   }
-//
-//   libinput_device_unref(device);
-//
-//   return true;
-// }
-//
+const char *
+pointer_get_name(struct pointer *pointer) {
+    if(!wlr_input_device_is_libinput(&pointer->wlr_pointer->base)) {
+        wlr_log(WLR_ERROR, "could not get pointer device name, not libinput");
+        return NULL;
+    }
+
+    struct libinput_device *dev = wlr_libinput_get_device_handle(&pointer->wlr_pointer->base);
+
+    libinput_device_ref(dev);
+    const char *name = libinput_device_get_name(dev);
+    libinput_device_unref(dev);
+
+    return name;
+}
+
+void
+pointer_configure(struct pointer *pointer, float sensitivity, enum tri_state acceleration, enum tri_state left_handed) {
+    if(!wlr_input_device_is_libinput(&pointer->wlr_pointer->base)) {
+        wlr_log(WLR_ERROR, "could not configure pointer device");
+        return;
+    }
+
+    struct libinput_device *dev = wlr_libinput_get_device_handle(&pointer->wlr_pointer->base);
+    libinput_device_ref(dev);
+
+    const char *name = libinput_device_get_name(dev);
+
+    if(libinput_device_config_accel_is_available(dev)) {
+        if(libinput_device_config_accel_set_speed(dev, sensitivity) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
+            wlr_log(WLR_ERROR, "applying sensitivity to device '%s' failed", name);
+        }
+
+        if(acceleration) {
+            enum libinput_config_accel_profile accel_profile = acceleration == TRI_STATE_ON
+                                                                     ? LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE
+                                                                     : LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT;
+            struct libinput_config_accel *accel_config = libinput_config_accel_create(accel_profile);
+
+            if(libinput_device_config_accel_apply(dev, accel_config) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
+                wlr_log(WLR_ERROR, "applying acceleration profile to device '%s' failed", name);
+            }
+            libinput_config_accel_destroy(accel_config);
+        }
+
+    } else {
+        wlr_log(WLR_ERROR, "acceleration and sensitivity options not availabe to device '%s'", name);
+    }
+
+    if(left_handed && libinput_device_config_left_handed_is_available(dev)) {
+        if(libinput_device_config_left_handed_set(dev, left_handed == TRI_STATE_ON) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
+            wlr_log(WLR_ERROR, "applying left handed to device '%s' failed", name);
+        }
+    } else {
+        wlr_log(WLR_ERROR, "left handed option not availabe to device '%s'", name);
+    }
+
+    libinput_device_unref(dev);
+}
+
+void
+pointer_configure_if_trackpad(struct pointer *pointer, enum tri_state tap_to_click, enum tri_state disable_while_typing,
+        enum tri_state natural_scroll, enum libinput_config_scroll_method scroll_method) {
+    if(!wlr_input_device_is_libinput(&pointer->wlr_pointer->base)) {
+        wlr_log(WLR_ERROR, "could not configure pointer device");
+        return;
+    }
+
+    struct libinput_device *dev = wlr_libinput_get_device_handle(&pointer->wlr_pointer->base);
+    libinput_device_ref(dev);
+
+    if(libinput_device_config_tap_get_finger_count(dev) <= 0) {
+        // not a trackpad
+        return;
+    }
+
+    const char *name = libinput_device_get_name(dev);
+
+    // TODO: i was kinda lazy to check if available, is that even an issue?
+    if(tap_to_click) {
+        if(libinput_device_config_tap_set_enabled(dev, tap_to_click == TRI_STATE_ON) !=
+                LIBINPUT_CONFIG_STATUS_SUCCESS) {
+            wlr_log(WLR_ERROR, "applying tap to click to device '%s' failed", name);
+        }
+    }
+
+    if(disable_while_typing) {
+        if(libinput_device_config_dwt_set_enabled(dev, disable_while_typing == TRI_STATE_ON) !=
+                LIBINPUT_CONFIG_STATUS_SUCCESS) {
+            wlr_log(WLR_ERROR, "applying disable while typing to device '%s' failed", name);
+        }
+    }
+
+    if(natural_scroll) {
+        if(libinput_device_config_scroll_set_natural_scroll_enabled(dev, natural_scroll == TRI_STATE_ON) !=
+                LIBINPUT_CONFIG_STATUS_SUCCESS) {
+            wlr_log(WLR_ERROR, "applying natural scroll to device '%s' failed", name);
+        }
+    }
+
+    if(libinput_device_config_scroll_set_method(dev, scroll_method) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
+        wlr_log(WLR_ERROR, "applying scroll method to device '%s' failed", name);
+    }
+}

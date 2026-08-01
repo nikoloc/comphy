@@ -1,8 +1,7 @@
 #include "action.h"
 
-#include "keyboard.h"
-#include "pointer.h"
-#include "state.h"
+#include "layout.h"
+#include "system.h"
 #include "workspace.h"
 
 void
@@ -42,14 +41,16 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             break;
         }
         case ACTION_TYPE_FOCUS: {
-            struct action_focus *action = _action;
-            // TODO: this
+            // TODO
             break;
         }
         case ACTION_TYPE_MOVE: {
+            // TODO
             break;
         }
         case ACTION_TYPE_EXEC: {
+            struct action_exec *action = _action;
+            shell(action->cmd);
             break;
         }
         case ACTION_TYPE_ENV: {
@@ -58,51 +59,110 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             setenv(action->key, action->value, true);
             break;
         }
-        case ACTION_TYPE_KEYBOARD: {
-            struct action_keyboard *action = _action;
-
-            if(action->rate) {
-                state->config.keyboard_rate = action->rate;
-            }
-
-            if(action->delay) {
-                state->config.keyboard_delay = action->delay;
-            }
-
-            // go through all the keyboards and apply new state
-            struct keyboard *iter;
-            wl_list_for_each(iter, &state->keyboards, link) {
-                wlr_keyboard_set_repeat_info(iter->wlr_keyboard, state->config.keyboard_rate,
-                        state->config.keyboard_delay);
-                // TODO: xkb stuff or maybe wrap everyhing into a structure and keyboard_configure()
-            }
+        case ACTION_TYPE_EXIT: {
+            wl_display_terminate(state->display);
+            // TODO: remove this flag by being smarter
+            state->is_exiting = true;
             break;
         }
-        case ACTION_TYPE_POINTER: {
+        case ACTION_TYPE_TOGGLE_FLOAT: {
+            struct toplevel *toplevel = state->focused_toplevel;
+            if(!toplevel) {
+                break;
+            }
+
+            switch(toplevel->state) {
+                case TOPLEVEL_STATE_TILED: {
+                    struct workspace *workspace = toplevel->workspace;
+                    layout_remove(toplevel);
+                    wl_list_insert(&workspace->floats, &toplevel->link);
+                    break;
+                }
+                case TOPLEVEL_STATE_FLOAT: {
+                    struct workspace *workspace = toplevel->workspace;
+                    wl_list_remove(&toplevel->link);
+                    layout_add(workspace, toplevel);
+                    break;
+                }
+                case TOPLEVEL_STATE_FULLSCREEN: {
+                    // no op
+                    break;
+                }
+            }
+
             break;
         }
-        case ACTION_TYPE_TRACKPAD: {
+        case ACTION_TYPE_TOGGLE_FULLSCREEN: {
+            struct toplevel *toplevel = state->focused_toplevel;
+            if(!toplevel) {
+                break;
+            }
+
+            toplevel_set_fullscreen(state, toplevel, toplevel->state != TOPLEVEL_STATE_FULLSCREEN);
             break;
         }
-        case ACTION_TYPE_CURSOR: {
+        case ACTION_TYPE_TOGGLE_FAKE_FULLSCREEN: {
+            // TODO
+            break;
+        }
+        case ACTION_TYPE_START_MOVE: {
+            struct toplevel *toplevel = state->focused_toplevel;
+            if(!toplevel) {
+                break;
+            }
+
+            operation_start_move(state, toplevel);
+            break;
+        }
+        case ACTION_TYPE_START_RESIZE: {
+            break;
+        }
+        case ACTION_TYPE_REPEAT_RATE: {
+            break;
+        }
+        case ACTION_TYPE_KEYMAP: {
+            break;
+        }
+        case ACTION_TYPE_TRACKPAD_DISABLE_WHILE_TYPING: {
+            break;
+        }
+        case ACTION_TYPE_TRACKPAD_NATURAL_SCROLL: {
+            break;
+        }
+        case ACTION_TYPE_TRACKPAD_SCROLL_METHOD: {
+            break;
+        }
+        case ACTION_TYPE_CURSOR_THEME: {
+            break;
+        }
+        case ACTION_TYPE_CURSOR_WARP: {
+            break;
+        }
+        case ACTION_TYPE_CURSOR_HIDE_AFTER_MS: {
             break;
         }
         case ACTION_TYPE_GAPS: {
             break;
         }
-        case ACTION_TYPE_BORDER: {
+        case ACTION_TYPE_SMART_GAPS: {
             break;
         }
-        case ACTION_TYPE_TOPLEVEL: {
+        case ACTION_TYPE_BORDER_WIDTH: {
             break;
         }
-        case ACTION_TYPE_ADJUST_MASTER_RATIO: {
+        case ACTION_TYPE_BORDER_COLOR: {
             break;
         }
-        case ACTION_TYPE_SET_MASTER_RATIO: {
+        case ACTION_TYPE_MASTER_RATIO: {
             break;
         }
-        case ACTION_TYPE_CREATE_KEYBINDS: {
+        case ACTION_TYPE_TOPLEVEL_RULE: {
+            break;
+        }
+        case ACTION_TYPE_POINTER_RULE: {
+            break;
+        }
+        case ACTION_TYPE_CREATE_KEYBIND: {
             break;
         }
     }

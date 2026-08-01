@@ -7,14 +7,24 @@
 
 struct workspace *
 workspace_create(struct state *state, struct output *output, int idx) {
-    struct workspace *workspace = ALLOCATE(struct workspace);
+    if(output->dummy_workspace) {
+        // this is the first real workspace created for this output, so we dont really create it, but just rename and
+        // remove the dummy workspace instead
+        struct workspace *workspace = output->dummy_workspace;
+        output->dummy_workspace = NULL;
+
+        workspace->idx = idx;
+        return workspace;
+    }
+
+    struct workspace *workspace = ALLOC(struct workspace);
 
     wl_list_init(&workspace->floats);
     wl_list_init(&workspace->slaves);
 
     workspace->output = output;
     workspace->idx = idx;
-    string_init(&workspace->original_output_name, output->wlr_output->name);
+    workspace->original_output_name = strdup(output->wlr_output->name);
 
     wl_list_insert(&output->workspaces, &workspace->link);
 
@@ -41,7 +51,7 @@ workspace_destroy(struct state *state, struct workspace *workspace) {
 
     // TODO: evacuate toplevels and check if layers need some work
 
-    string_deinit(&workspace->original_output_name);
+    FREE(workspace->original_output_name);
 
     wl_list_remove(&workspace->link);
     free(workspace);

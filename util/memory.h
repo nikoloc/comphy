@@ -21,10 +21,10 @@
 #endif
 #endif
 
-#define COPY(dest, src, count, type) (memcpy(dest, src, count * sizeof(type)))
-#define MOVE(dest, src, count, type) (memmove(dest, src, count * sizeof(type)))
-#define COMPARE(a, b, count, type) (memcmp(a, b, count * sizeof(type)) == 0)
-#define ZERO(dest, count, type) (memset(dest, 0, count * sizeof(type)))
+#define COPY(dest, src, count, type) (memcpy((dest), (src), (count) * sizeof(type)))
+#define MOVE(dest, src, count, type) (memmove((dest), (src), (count) * sizeof(type)))
+#define COMPARE(a, b, count, type) (memcmp((a), (b), (count) * sizeof(type)) == 0)
+#define ZERO(dest, count, type) (memset((dest), 0, (count) * sizeof(type)))
 
 static inline void *
 _allocate(size_t count, size_t size) {
@@ -42,11 +42,10 @@ _reallocate(void *ptr, size_t count, size_t size) {
     return ptr;
 }
 
-#define ALLOCATE(type) ((type *)_allocate(1, sizeof(type)))
-#define ALLOCATE_MANY(count, type) ((type *)_allocate(count, sizeof(type)))
-#define REALLOCATE(ptr, count, type) ((type *)_reallocate(ptr, count, sizeof(type)))
-// for convinience i also have it by this name, more suitable to use when we are not sure
-// wheather the pointer we have already has some memory allocated, or not
-#define RESERVE(ptr, count, type) ((type *)_reallocate(ptr, count, sizeof(type)))
+#define ALLOC(type) ((type *)_allocate(1, sizeof(type)))
+#define ALLOC_MANY(count, type) ((type *)_allocate((count), sizeof(type)))
+#define REALLOC(ptr, count, type) ((type *)_reallocate((ptr), (count), sizeof(type)))
+#define RESERVE(ptr, count, type) ((type *)_reallocate((ptr), (count), sizeof(type)))
+#define FREE(ptr) (free(ptr))
 
 #endif
