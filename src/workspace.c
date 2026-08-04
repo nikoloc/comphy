@@ -54,6 +54,10 @@ workspace_destroy(struct state *state, struct workspace *workspace) {
         // TODO: find new workspace to set as active
     }
 
+    if(workspace->transaction_time_out) {
+        wl_event_source_remove(workspace->transaction_time_out);
+    }
+
     // TODO: evacuate toplevels and check if layers need some work
 
     FREE(workspace->original_output_name);

@@ -20,6 +20,7 @@
 #include "transaction.h"
 #include "util/macros.h"
 #include "util/memory.h"
+#include "util/time_util.h"
 #include "workspace.h"
 
 static bool
@@ -75,7 +76,7 @@ set_tiled_hacks(struct toplevel *toplevel, bool is_tiled) {
 
     if(is_tiled) {
         wlr_xdg_toplevel_set_tiled(toplevel->wlr_toplevel,
-                WLR_EDGE_TOP & WLR_EDGE_RIGHT & WLR_EDGE_BOTTOM & WLR_EDGE_LEFT);
+                WLR_EDGE_TOP | WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT);
     } else {
         wlr_xdg_toplevel_set_tiled(toplevel->wlr_toplevel, WLR_EDGE_NONE);
     }
@@ -87,6 +88,8 @@ handle_map(struct wl_listener *listener, void *data) {
 
     struct toplevel *toplevel = CONTAINER_OF(listener, struct toplevel, map);
     struct state *state = state_get();
+
+    wlr_log(WLR_DEBUG, "toplevel '%p' mapped", (void *)toplevel);
 
     if(!state->active_workspace) {
         // TODO: what if there is no output?
@@ -117,11 +120,10 @@ handle_map(struct wl_listener *listener, void *data) {
             layout_add(workspace, toplevel);
             // immediately reconfigure the layout so the right size is sent to the client. NOTE: this is not ideal,
             // since we request another state from the client, but working around it creates a lot more work i am not
-            // doing rn. in order to not get this state drawn on the screen we need to keep the node disabled and only
-            // enable it later, when the real state comes.
-            // TODO: fix, does not do anything
-            wlr_scene_node_set_enabled(&toplevel->content_tree->node, false);
+            // doing rn.
             layout_configure(state, workspace);
+            wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
+            toplevel->needs_initial_enable = true;
             break;
         }
         case TOPLEVEL_STATE_FLOAT: {
@@ -190,6 +192,8 @@ handle_unmap(struct wl_listener *listener, void *data) {
     struct toplevel *toplevel = CONTAINER_OF(listener, struct toplevel, unmap);
     struct state *state = state_get();
 
+    wlr_log(WLR_DEBUG, "toplevel '%p' unmapped", (void *)toplevel);
+
     struct workspace *workspace = toplevel->workspace;
 
     if(toplevel == state->prev_focused) {
@@ -244,11 +248,20 @@ handle_unmap(struct wl_listener *listener, void *data) {
 }
 
 static void
+send_frame_done(struct toplevel *toplevel) {
+    struct timespec now = time_now_timespec();
+
+    wlr_surface_send_frame_done(toplevel->wlr_toplevel->base->surface, &now);
+}
+
+static void
 handle_commit(struct wl_listener *listener, void *data) {
     UNUSED(data);
 
     struct toplevel *toplevel = CONTAINER_OF(listener, struct toplevel, commit);
     struct state *state = state_get();
+
+    wlr_log(WLR_DEBUG, "toplevel '%p' commited", (void *)toplevel);
 
     if(!toplevel->wlr_toplevel->base->initialized) {
         return;
@@ -286,9 +299,17 @@ handle_commit(struct wl_listener *listener, void *data) {
         return;
     }
 
+    if(!toplevel->is_dirty) {
+        wlr_log(WLR_DEBUG, "toplevel commited but not dirty");
+        return;
+    }
+
     u32 serial = toplevel->wlr_toplevel->base->current.configure_serial;
-    if(!toplevel->is_dirty || serial < toplevel->configure_serial) {
-        // we dont have to commit this transaction as its either not requested or the serial is not the right one
+    if(serial < toplevel->configure_serial) {
+        wlr_log(WLR_DEBUG, "toplevel commited but old serial");
+        // send a frame event, this makes the client commit a new buffer, conforming to our new state, in order to
+        // conform to our transaction state
+        send_frame_done(toplevel);
         return;
     }
 
@@ -302,10 +323,6 @@ handle_destroy(struct wl_listener *listener, void *data) {
     UNUSED(data);
 
     struct toplevel *toplevel = CONTAINER_OF(listener, struct toplevel, destroy);
-
-    if(toplevel->transaction_time_out) {
-        wl_event_source_remove(toplevel->transaction_time_out);
-    }
 
     if(toplevel->transaction_schedule_idle) {
         wl_event_source_remove(toplevel->transaction_schedule_idle);

@@ -34,7 +34,7 @@ struct toplevel {
     double active_opacity;
 
     struct wlr_box current, pending;
-    bool needs_centering;
+    bool needs_centering, needs_initial_enable;
 
     // for the toplevel we create a scene tree, which contains the whole toplevel presentation on the screen: the
     // decorations and the content. when the toplevel is dirty we create the last snapshot of the content tree and
@@ -44,7 +44,6 @@ struct toplevel {
     struct wlr_scene_rect *border;
 
     struct wlr_scene_tree *snapshot_tree;
-    struct wl_event_source *transaction_time_out;
     struct wl_event_source *transaction_schedule_idle;
 
     struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel_handle;

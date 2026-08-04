@@ -19,6 +19,8 @@ struct workspace {
     struct wl_list slaves, floats;
     struct toplevel *fullscreen;
 
+    struct wl_event_source *transaction_time_out;
+
     struct wl_list link;
 };
 

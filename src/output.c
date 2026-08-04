@@ -112,8 +112,6 @@ handle_frame(struct wl_listener *listener, void *data) {
 
     struct output *output = CONTAINER_OF(listener, struct output, frame);
 
-    wlr_log(WLR_DEBUG, "frame event for output '%s'", output->wlr_output->name);
-
     wlr_scene_output_commit(output->scene_output, NULL);
 
     struct timespec now = time_now_timespec();
