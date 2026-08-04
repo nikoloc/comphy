@@ -11,6 +11,7 @@
 #include <wlr/util/log.h>
 
 #include "layer.h"
+#include "layout.h"
 #include "list_helpers.h"
 #include "pointer.h"
 #include "toplevel.h"
@@ -18,6 +19,18 @@
 #include "util/memory.h"
 #include "util/time_util.h"
 #include "workspace.h"
+
+static inline void
+update_area(struct output *output) {
+    output->full_area = (struct wlr_box){
+            output->output_layout_output->x,
+            output->output_layout_output->y,
+            output->wlr_output->width,
+            output->wlr_output->height,
+    };
+    // TODO: fix
+    output->usable_area = output->full_area;
+}
 
 static inline bool
 mode_fit_and_better(struct wlr_output_mode *mode, int width, int height, int refresh, struct wlr_output_mode *best) {
@@ -65,7 +78,7 @@ find_highest_refresh(struct output *output, int width, int height) {
 }
 
 static void
-modeset(struct output *output, int width, int height, int refresh, double scale) {
+modeset(struct output *output, int width, int height, int refresh, float scale) {
     bool wants_preferred = width == 0 || height == 0;
     bool wants_highest_refresh = refresh == 0;
 
@@ -73,19 +86,17 @@ modeset(struct output *output, int width, int height, int refresh, double scale)
                                  : wants_highest_refresh ? find_highest_refresh(output, width, height)
                                                          : find_mode(output, width, height, refresh);
 
-    if(!mode) {
-        wlr_log(WLR_INFO, "output '%s' has no modes available", output->wlr_output->name);
-        return;
-    }
-
-    wlr_log(WLR_INFO, "modesetting output '%s' to %dx%d@%dmHz", output->wlr_output->name, mode->width, mode->height,
-            mode->refresh);
-
     struct wlr_output_state state;
     wlr_output_state_init(&state);
     wlr_output_state_set_enabled(&state, true);
     wlr_output_state_set_scale(&state, scale);
-    wlr_output_state_set_mode(&state, mode);
+    if(mode) {
+        wlr_log(WLR_INFO, "modesetting output '%s' to %dx%d@%dmHz", output->wlr_output->name, mode->width, mode->height,
+                mode->refresh);
+        wlr_output_state_set_mode(&state, mode);
+    } else {
+        wlr_log(WLR_INFO, "output '%s' has no modes available", output->wlr_output->name);
+    }
 
     // try to commit the state. it should not fail!
     if(!wlr_output_commit_state(output->wlr_output, &state)) {
@@ -99,7 +110,9 @@ static void
 handle_frame(struct wl_listener *listener, void *data) {
     UNUSED(data);
 
-    struct output *output = CONTAINER_OF(listener, struct output, destroy);
+    struct output *output = CONTAINER_OF(listener, struct output, frame);
+
+    wlr_log(WLR_DEBUG, "frame event for output '%s'", output->wlr_output->name);
 
     wlr_scene_output_commit(output->scene_output, NULL);
 
@@ -110,9 +123,14 @@ handle_frame(struct wl_listener *listener, void *data) {
 static void
 handle_request_state(struct wl_listener *listener, void *data) {
     struct output *output = CONTAINER_OF(listener, struct output, request_state);
-
     struct wlr_output_event_request_state *request_state = data;
+    struct state *state = state_get();
+
+    wlr_log(WLR_DEBUG, "request state event for output '%s':", output->wlr_output->name);
     wlr_output_commit_state(output->wlr_output, request_state->state);
+
+    update_area(output);
+    layout_reconfigure_all(state);
 }
 
 static void
@@ -174,16 +192,12 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
     // struct output_config config = {0};
     // output_configure(state, output, &config);
 
+    modeset(output, 0, 0, 0, 1.0f);
+
     output->scene_output = wlr_scene_output_create(state->scene.wlr_scene, wlr_output);
     output->output_layout_output = wlr_output_layout_add_auto(state->output_layout, output->wlr_output);
 
-    output->full_area = (struct wlr_box){
-            output->output_layout_output->x,
-            output->output_layout_output->y,
-            output->wlr_output->width,
-            output->wlr_output->height,
-    };
-    output->usable_area = output->full_area;
+    update_area(output);
 
     // TODO: when locking
     // output->lock_rect = wlr_scene_rect_create(&state->scene.wlr_scene->tree, 0, 0, (float[4]){0.0f, 0.0f,
@@ -193,8 +207,6 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
     // create the dummy workspace. TODO: find orphans when hotplugging
     wl_list_init(&output->workspaces);
     output->dummy_workspace = workspace_create(state, output, 1);
-    output->active_workspace = output->dummy_workspace;
-    wl_list_insert(&output->workspaces, &output->dummy_workspace->link);
 
     // initialize per output layers on this output
     wl_list_init(&output->layer.background);
@@ -245,13 +257,13 @@ output_focus(struct state *state, struct output *output) {
         struct layer *iter;
         wl_list_for_each(iter, &output->layer.overlay, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
+                // layer_focus(state, iter);
                 return;
             }
         }
         wl_list_for_each(iter, &output->layer.top, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
+                // layer_focus(state, iter);
                 return;
             }
         }
@@ -280,13 +292,13 @@ output_focus(struct state *state, struct output *output) {
         struct layer *iter;
         wl_list_for_each(iter, &output->layer.bottom, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
+                // layer_focus(state, iter);
                 return;
             }
         }
         wl_list_for_each(iter, &output->layer.background, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
+                // layer_focus(state, iter);
                 return;
             }
         }

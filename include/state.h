@@ -40,10 +40,9 @@ struct state {
 
     struct wl_list pointers;
     struct wl_list keyboards;
-    // TODO: remove this and instead get it from the seat when needed
-    struct keyboard *active_keyboard;
-
     struct wl_list outputs;
+
+    struct wl_list keybinds;
 
     enum operation operation;
     struct toplevel *grabbed_toplevel;

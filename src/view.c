@@ -61,7 +61,7 @@ climb_tree_to_root(struct wlr_scene_tree *tree) {
 }
 
 enum view *
-root_parent_of_surface(struct wlr_surface *surface) {
+view_root_parent_of_surface(struct wlr_surface *surface) {
     surface = wlr_surface_get_root_surface(surface);
 
     struct wlr_xdg_surface *xdg_surface = wlr_xdg_surface_try_from_wlr_surface(surface);
@@ -139,13 +139,49 @@ view_focus(struct state *state, enum view *view) {
         }
         case VIEW_LAYER: {
             struct layer *layer = CONTAINER_OF(view, struct layer, view);
-            layer_focus(state, layer);
+            // layer_focus(state, layer);
             break;
         }
         case VIEW_LOCK_SURFACE: {
             struct lock_surface *lock = CONTAINER_OF(view, struct lock_surface, view);
-            lock_surface_focus(state, lock);
+            // lock_surface_focus(state, lock);
             break;
         }
     }
+}
+
+struct toplevel *
+view_get_toplevel(enum view *view) {
+    if(*view == VIEW_TOPLEVEL) {
+        return CONTAINER_OF(view, struct toplevel, view);
+    }
+
+    return NULL;
+}
+
+struct popup *
+view_get_popup(enum view *view) {
+    if(*view == VIEW_POPUP) {
+        return CONTAINER_OF(view, struct popup, view);
+    }
+
+    return NULL;
+}
+
+struct layer *
+view_get_layer(enum view *view) {
+    if(*view == VIEW_LAYER) {
+        return CONTAINER_OF(view, struct layer, view);
+    }
+
+    return NULL;
+}
+
+struct lock_surface *
+view_get_lock_surface(enum view *view) {
+    if(*view == VIEW_LOCK_SURFACE) {
+        return CONTAINER_OF(view, struct lock_surface, view);
+    }
+
+    return NULL;
 }

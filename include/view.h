@@ -28,4 +28,16 @@ view_get_output(enum view *view);
 void
 view_focus(struct state *state, enum view *view);
 
+struct toplevel *
+view_get_toplevel(enum view *view);
+
+struct popup *
+view_get_popup(enum view *view);
+
+struct layer *
+view_get_layer(enum view *view);
+
+struct lock_surface *
+view_get_lock_surface(enum view *view);
+
 #endif

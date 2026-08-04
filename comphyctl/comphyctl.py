@@ -2,7 +2,7 @@ import sys
 import socket
 import os
 
-SOCKET_PATH = "/tmp/comphy/ctl.sock"
+SOCKET_PATH = "/tmp/comphy/ctl"
 
 
 def main():

@@ -12,7 +12,7 @@
 #include "view.h"
 #include "workspace.h"
 
-void
+static void
 handle_commit(struct wl_listener *listener, void *data) {
     UNUSED(data);
 
@@ -53,7 +53,7 @@ handle_commit(struct wl_listener *listener, void *data) {
     }
 }
 
-void
+static void
 handle_destroy(struct wl_listener *listener, void *data) {
     UNUSED(data);
 

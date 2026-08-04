@@ -10,6 +10,6 @@ void
 transaction_schedule_commit(struct state *state, struct toplevel *toplevel);
 
 void
-transaction_mark_dirty(struct toplevel *toplevel);
+transaction_mark_dirty(struct state *state, struct toplevel *toplevel);
 
 #endif

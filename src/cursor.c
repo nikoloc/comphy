@@ -12,7 +12,9 @@
 
 void
 cursor_set_image(struct state *state, char *image) {
-    wlr_cursor_set_xcursor(state->cursor.wlr_cursor, state->cursor.xcursor_mgr, image);
+    if(state->cursor.xcursor_mgr) {
+        wlr_cursor_set_xcursor(state->cursor.wlr_cursor, state->cursor.xcursor_mgr, image);
+    }
 }
 
 void
@@ -42,8 +44,12 @@ cursor_focus(struct state *state, u32 time_ms, bool handle_keyboard_focus) {
     //     constraint_set_as_current(wlr_constraint->data);
     // }
 
-    wlr_seat_pointer_notify_enter(state->seat.wlr_seat, surface, sx, sy);
-    wlr_seat_pointer_notify_motion(state->seat.wlr_seat, time_ms, sx, sy);
+    // NOTE: hovering over the border of a toplevel would return that toplevel and we would give it the keyboard focus;
+    // however, there would be no surface to give actual focus to, so we skip
+    if(surface) {
+        wlr_seat_pointer_notify_enter(state->seat.wlr_seat, surface, sx, sy);
+        wlr_seat_pointer_notify_motion(state->seat.wlr_seat, time_ms, sx, sy);
+    }
 }
 
 static void
@@ -112,9 +118,13 @@ handle_button(struct wl_listener *listener, void *data) {
     struct wlr_pointer_button_event *event = data;
     struct state *state = state_get();
 
-    // TODO: when pointer binds
-    // u32 modifiers = state->active_keyboard ? wlr_keyboard_get_modifiers(state->active_keyboard->wlr_keyboard) : 0;
+    u32 modifiers = 0;
+    struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(state->seat.wlr_seat);
+    if(keyboard) {
+        modifiers = wlr_keyboard_get_modifiers(keyboard);
+    }
 
+    // TODO: when pointer binds
     // struct keybind *k;
     // wl_list_for_each(k, &server.config->pointer_keybinds, link) {
     //     if(!k->initialized)
@@ -133,12 +143,12 @@ handle_button(struct wl_listener *listener, void *data) {
     //     }
     // }
 
-    // notify the client with pointer focus that a button press has occurred
-    wlr_seat_pointer_notify_button(state->seat.wlr_seat, event->time_msec, event->button, event->state);
-
-    // TODO: recheck these deps and maybe not infrom client if consumed?
+    // TODO: recheck this logic
     if(event->state == WL_POINTER_BUTTON_STATE_RELEASED && state->operation) {
         operation_stop_whatever(state);
+    } else {
+        // else  notify the client with pointer focus that a button press has occurred
+        wlr_seat_pointer_notify_button(state->seat.wlr_seat, event->time_msec, event->button, event->state);
     }
 }
 
@@ -198,7 +208,7 @@ cursor_init(struct cursor *cursor, struct wlr_output_layout *output_layout) {
     wlr_cursor_attach_output_layout(cursor->wlr_cursor, output_layout);
 
     // TODO: is there a default theme with no manager or we need to set it?
-    // cursor_set_theme();
+    cursor_set_theme(cursor, "Adwaita", 24);
 
     cursor->motion.notify = handle_motion;
     wl_signal_add(&cursor->wlr_cursor->events.motion, &cursor->motion);

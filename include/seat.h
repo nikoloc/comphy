@@ -3,6 +3,8 @@
 
 #include <wlr/types/wlr_seat.h>
 
+#include "view.h"
+
 struct seat {
     struct wlr_seat *wlr_seat;
 
@@ -23,5 +25,8 @@ struct state;
 
 void
 seat_inform_capabilities(struct state *state);
+
+enum view *
+seat_get_pointer_focused(struct state *state);
 
 #endif

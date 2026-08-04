@@ -5,6 +5,7 @@ focus <direction: "up" "right" "down" "left">
 move <direction: "up" "right" "down" "left">
 exec <cmd: string>
 env <name: string> <value: string>
+close
 exit
 toggle_float
 toggle_fullscreen
@@ -34,4 +35,4 @@ toplevel_rule [--app_id <app_id: string>] [--title <title: string>] [--floats <v
     [--default_state <value: "float" "tiled"] [--default_width <value: int>]
     [--default_height <value: int>]
 
-create_keybind [--even_when_locked] <modifiers: string> <key: string> <cmd: string>
+create_keybind [--even_when_locked] <modifiers: string> <key: string> <...action>

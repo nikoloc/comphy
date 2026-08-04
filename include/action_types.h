@@ -4,15 +4,10 @@
 // this file, alongside `action_parser.c` is ai generated (and patched if needed) from the specifiaction found in the
 // `comphyctl_commands.txt` file. if the file is regenerated this notice should be preserved.
 
-// #ifndef ACTION_H
-// #error "this header should not be included by itself, include action.h instead"
-// #endif
-
 #include <libinput.h>
 #include <wlr/types/wlr_output_layout.h>
 
 #include "color.h"
-#include "util/ints.h"
 
 enum action_type {
     ACTION_TYPE_CREATE_WORKSPACE = 1,
@@ -22,6 +17,7 @@ enum action_type {
     ACTION_TYPE_MOVE,
     ACTION_TYPE_EXEC,
     ACTION_TYPE_ENV,
+    ACTION_TYPE_CLOSE,
     ACTION_TYPE_EXIT,
     ACTION_TYPE_TOGGLE_FLOAT,
     ACTION_TYPE_TOGGLE_FULLSCREEN,
@@ -32,6 +28,7 @@ enum action_type {
     ACTION_TYPE_REPEAT_RATE,
     ACTION_TYPE_KEYMAP,
     ACTION_TYPE_TRACKPAD_DISABLE_WHILE_TYPING,
+    ACTION_TYPE_TRACKPAD_TAP_TO_CLICK,
     ACTION_TYPE_TRACKPAD_NATURAL_SCROLL,
     ACTION_TYPE_TRACKPAD_SCROLL_METHOD,
     ACTION_TYPE_CURSOR_THEME,
@@ -90,7 +87,11 @@ struct action_keymap {
     char *xkb_options;
 };
 
-struct action_trackpad_disable_while_typing {
+struct action_trackpad_dwt {
+    bool enable;
+};
+
+struct action_trackpad_tap_to_click {
     bool enable;
 };
 
@@ -142,15 +143,6 @@ struct action_border_color {
 struct action_master_ratio {
     bool adjust;
     float value;
-};
-
-struct action_create_keybind {
-    bool even_when_locked;
-    u32 modifiers;
-    u32 key;
-
-    enum action_type type;
-    void *action;
 };
 
 #endif

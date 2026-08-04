@@ -51,6 +51,7 @@ ctx.add_dependency(
         "wayland-server",
         "wlroots-0.20",
         "xkbcommon",
+        "libinput",
     ]
 )
 
@@ -61,12 +62,15 @@ ctx.add_source(
         "src/backend.c",
         "src/color.c",
         "src/comphy.c",
+        "src/config.c",
         "src/ctl.c",
         "src/cursor.c",
         "src/decoration.c",
         "src/gamma_control.c",
         "src/keyboard.c",
         "src/layer_shell.c",
+        "src/layout.c",
+        "src/lock.c",
         "src/operation.c",
         "src/output.c",
         "src/pointer.c",

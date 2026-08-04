@@ -24,16 +24,15 @@ struct config {
     struct wl_list toplevel_rules;
 
     struct {
-        bool disable_while_typing;
+        bool dwt;
         bool natural_scroll;
         bool tap_to_click;
         enum libinput_config_scroll_method scroll_method;
     } trackpad;
 
     struct {
-        char *theme;
-        int size;
-        int hide_after;
+        int hide_after_ms;
+        enum cursor_warp warp;
     } cursor;
 
     struct {
@@ -49,6 +48,7 @@ struct config {
 
     struct {
         int outer, inner;
+        bool smart;
     } gaps;
 
     float master_ratio;
@@ -61,11 +61,5 @@ void
 config_deinit(struct config *config);
 
 struct state;
-
-void
-config_add_pointer_rule(struct state *state, struct action_pointer *pointer);
-
-void
-config_add_toplevel_rule(struct state *state, struct action_toplevel *toplevel);
 
 #endif

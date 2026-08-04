@@ -92,6 +92,17 @@ layout_configure(struct state *state, struct workspace *workspace) {
     }
 }
 
+void
+layout_reconfigure_all(struct state *state) {
+    struct output *output;
+    wl_list_for_each(output, &state->outputs, link) {
+        struct workspace *workspace;
+        wl_list_for_each(workspace, &output->workspaces, link) {
+            layout_configure(state, workspace);
+        }
+    }
+}
+
 struct toplevel *
 layout_toplevel_at(struct workspace *workspace, int x, int y) {
     // TODO

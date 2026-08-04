@@ -47,4 +47,6 @@ lock_surface_focus(struct state *state, struct lock_surface *lock_surface);
 void
 lock_mgr_init(struct lock_mgr *mgr, struct wl_display *display);
 
+void
+lock_mgr_deinit(struct lock_mgr *mgr);
 #endif

@@ -32,12 +32,15 @@
 #include "seat.h"
 #include "state.h"
 #include "system.h"
+#define DSTRING_IMPLEMENTATION
 #include "util/dstring.h"
 #include "util/macros.h"
 
 static void
 create_temp_dir(void) {
     mkdir(COMPHY_TEMP_DIR, 0777);
+    // TODO: do better
+    unlink(COMPHYCTL_SOCKET);
 }
 
 static void
@@ -58,7 +61,7 @@ init_logs(bool debug) {
 
         wlr_log_init(WLR_DEBUG, NULL);
     } else {
-        wlr_log_init(WLR_INFO, NULL);
+        wlr_log_init(WLR_DEBUG, NULL);
     }
 }
 
@@ -87,13 +90,27 @@ get_init_script_path(string_t *dest) {
     return false;
 }
 
+static void
+exec_init_script(void *data) {
+    UNUSED(data);
+
+    string_t init = {0};
+    if(get_init_script_path(&init)) {
+        wlr_log(WLR_INFO, "running init script '%s'", string_c_string_view(&init));
+        shell(string_c_string_view(&init));
+        string_deinit(&init);
+    } else {
+        wlr_log(WLR_ERROR, "init script not found");
+    }
+}
+
 int
 main(int argc, char *argv[]) {
     UNUSED(argc), UNUSED(argv);
 
     create_temp_dir();
     // TODO: fix hardcoded debug value
-    init_logs(true);
+    init_logs(false);
 
     struct state *state = state_get();
     state->display = wl_display_create();
@@ -102,11 +119,15 @@ main(int argc, char *argv[]) {
         goto err;
     }
 
+    wlr_log(WLR_DEBUG, "display created");
+
     config_init(&state->config);
     if(!backend_init(&state->backend, state->display)) {
         wlr_log(WLR_ERROR, "could not create the backend");
         goto config;
     }
+
+    wlr_log(WLR_DEBUG, "backend inited");
 
     state->output_layout = wlr_output_layout_create(state->display);
 
@@ -122,8 +143,10 @@ main(int argc, char *argv[]) {
 
     state->foreign_toplevel_manager = wlr_foreign_toplevel_manager_v1_create(state->display);
 
+    wl_list_init(&state->outputs);
     wl_list_init(&state->pointers);
     wl_list_init(&state->keyboards);
+    wl_list_init(&state->keybinds);
 
     // essensial interfaces
     wlr_compositor_create(state->display, 6, state->backend.renderer);
@@ -138,8 +161,8 @@ main(int argc, char *argv[]) {
     wlr_export_dmabuf_manager_v1_create(state->display);
     wlr_fractional_scale_manager_v1_create(state->display, COMPHY_FRACTIONAL_SCALE_VERSION);
     // TODO: wire up these so they actually do something
-    wlr_virtual_pointer_manager_v1_create(state->display);
-    wlr_virtual_keyboard_manager_v1_create(state->display);
+    // wlr_virtual_pointer_manager_v1_create(state->display);
+    // wlr_virtual_keyboard_manager_v1_create(state->display);
 
     // TODO: rewire this in the future
     // server.relative_pointer_manager = wlr_relative_pointer_manager_v1_create(server.wl_display);
@@ -161,14 +184,12 @@ main(int argc, char *argv[]) {
         goto cleanup;
     }
 
+    wlr_log(WLR_DEBUG, "backend started");
+
+    struct wl_event_loop *event_loop = wl_display_get_event_loop(state->display);
+    wl_event_loop_add_idle(event_loop, exec_init_script, NULL);
+
     setenv("WAYLAND_DISPLAY", socket, true);
-
-    // execute the init script and start the event loop. TODO: will this work, or why have to time it better?
-    string_t init = {0};
-    if(get_init_script_path(&init)) {
-        shell(string_c_string_view(&init));
-    }
-
     wlr_log(WLR_INFO, "running 'comphy' on socket '%s'", socket);
     wl_display_run(state->display);
 
@@ -176,10 +197,12 @@ main(int argc, char *argv[]) {
     wl_display_destroy_clients(state->display);
 cleanup:
     scene_deinit(&state->scene);
+    ctl_deinit(&state->ctl);
     seat_deinit(&state->seat);
     xdg_shell_deinit(&state->xdg_shell);
     layer_shell_deinit(&state->layer_shell);
     cursor_deinit(&state->cursor);
+    lock_mgr_deinit(&state->lock_mgr);
     decoration_deinit(&state->decoration);
     gamma_control_deinit(&state->gamma_control);
     backend_deinit(&state->backend);

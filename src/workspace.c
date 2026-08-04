@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <wlr/util/log.h>
 
 #include "util/memory.h"
 
@@ -14,6 +15,8 @@ workspace_create(struct state *state, struct output *output, int idx) {
         output->dummy_workspace = NULL;
 
         workspace->idx = idx;
+
+        wlr_log(WLR_INFO, "replaced dummy workspace of output '%s' to workspace '%d'", output->wlr_output->name, idx);
         return workspace;
     }
 
@@ -35,6 +38,8 @@ workspace_create(struct state *state, struct output *output, int idx) {
     if(!state->active_workspace) {
         state->active_workspace = workspace;
     }
+
+    wlr_log(WLR_INFO, "created workspace for output '%s' indexed '%d'", output->wlr_output->name, idx);
 
     return workspace;
 }
@@ -100,7 +105,7 @@ workspace_set_active(struct state *state, struct workspace *workspace) {
     if(state->active_workspace->output != workspace->output) {
         // if we are changing the output then warp the cursor
         // TODO: change so we only do this if there is no toplevel, else warp to toplevels
-        output_warp_cursor(state, workspace->output);
+        cursor_warp_output(state, workspace->output);
     }
 
     state->active_workspace = workspace;

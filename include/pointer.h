@@ -24,10 +24,18 @@ const char *
 pointer_get_name(struct pointer *pointer);
 
 void
-pointer_configure(struct pointer *pointer, float sensitivity, enum tri_state acceleration, enum tri_state left_handed);
+pointer_configure_from_rules(struct state *state, struct pointer *pointer);
 
 void
-pointer_configure_if_trackpad(struct pointer *pointer, enum tri_state tap_to_click, enum tri_state disable_while_typing,
-        enum tri_state natural_scroll, enum libinput_config_scroll_method scroll_method);
+pointer_if_trackpad_set_tap_to_click(struct pointer *pointer, bool tap_to_click);
+
+void
+pointer_if_trackpad_set_dwt(struct pointer *pointer, bool dwt);
+
+void
+pointer_if_trackpad_set_natural_scroll(struct pointer *pointer, bool natural_scroll);
+
+void
+pointer_if_trackpad_set_scroll_method(struct pointer *pointer, enum libinput_config_scroll_method scroll_method);
 
 #endif

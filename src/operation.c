@@ -9,6 +9,34 @@
 #include "util/time_util.h"
 #include "workspace.h"
 
+// TODO: if server side then handle the cursor, reference:
+// void
+// keybind_resize_focused_toplevel(void *data) {
+//     struct mwc_toplevel *toplevel = get_pointer_focused_toplevel();
+//     if(toplevel == NULL || !toplevel->floating)
+//         return;
+//
+//     uint32_t edges = toplevel_get_closest_corner(server.cursor, toplevel);
+//
+//     char cursor_image[128] = {0};
+//     if(edges & WLR_EDGE_TOP) {
+//         strcat(cursor_image, "top_");
+//     } else {
+//         strcat(cursor_image, "bottom_");
+//     }
+//     if(edges & WLR_EDGE_LEFT) {
+//         strcat(cursor_image, "left_");
+//     } else {
+//         strcat(cursor_image, "right_");
+//     }
+//     strcat(cursor_image, "corner");
+//
+//     wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, cursor_image);
+//
+//     server.client_driven_move_resize = false;
+//     toplevel_start_resize(toplevel, edges);
+// }
+
 void
 operation_start_move(struct state *state, struct toplevel *toplevel) {
     if(state->operation) {

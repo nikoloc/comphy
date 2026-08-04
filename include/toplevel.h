@@ -44,6 +44,8 @@ struct toplevel {
     struct wlr_scene_rect *border;
 
     struct wlr_scene_tree *snapshot_tree;
+    struct wl_event_source *transaction_time_out;
+    struct wl_event_source *transaction_schedule_idle;
 
     struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel_handle;
 
@@ -80,5 +82,8 @@ toplevel_float_largest_output_intersection(struct state *state, struct toplevel 
 
 void
 toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace);
+
+u32
+toplevel_get_corner_closest_to(struct toplevel *toplevel, int x, int y);
 
 #endif

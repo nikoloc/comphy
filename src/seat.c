@@ -71,3 +71,13 @@ seat_inform_capabilities(struct state *state) {
 
     wlr_seat_set_capabilities(state->seat.wlr_seat, caps);
 }
+
+enum view *
+seat_get_pointer_focused(struct state *state) {
+    struct wlr_surface *surface = state->seat.wlr_seat->pointer_state.focused_surface;
+    if(!surface) {
+        return NULL;
+    }
+
+    return view_root_parent_of_surface(surface);
+}

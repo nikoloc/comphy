@@ -6,13 +6,14 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "action.h"
+#include "keybind.h"
 #include "util/memory.h"
 #include "util/parse.h"
 #define SHELL_PARSER_IMPLEMENTATION
 #include "util/shell_parser.h"
 
-// this file, alongside `action_types.h` is ai generated (and patched if needed) from the specification found in the
-// `comphyctl_commands.txt` file. if the file is regenerated this notice should be preserved.
+// this file, alongside `action_types.h` was largely ai generated and patched afterwards from the specification found in
+// the `comphyctl_commands.txt` file. if the file is regenerated this notice should be preserved.
 
 void
 action_destroy(enum action_type type, void *_action) {
@@ -45,6 +46,9 @@ action_destroy(enum action_type type, void *_action) {
             FREE(action->value);
             break;
         }
+        case ACTION_TYPE_CLOSE: {
+            break;
+        }
         case ACTION_TYPE_EXIT: {
             break;
         }
@@ -74,6 +78,9 @@ action_destroy(enum action_type type, void *_action) {
             break;
         }
         case ACTION_TYPE_TRACKPAD_DISABLE_WHILE_TYPING: {
+            break;
+        }
+        case ACTION_TYPE_TRACKPAD_TAP_TO_CLICK: {
             break;
         }
         case ACTION_TYPE_TRACKPAD_NATURAL_SCROLL: {
@@ -109,18 +116,17 @@ action_destroy(enum action_type type, void *_action) {
             break;
         }
         case ACTION_TYPE_TOPLEVEL_RULE: {
-            // TODO: implementirati ako bude stringova unutra
+            // TODO: implement
             break;
         }
         case ACTION_TYPE_POINTER_RULE: {
-            // TODO: implementirati ako bude stringova unutra
+            // TODO: implement
             break;
         }
         case ACTION_TYPE_CREATE_KEYBIND: {
-            struct action_create_keybind *action = _action;
-            if(action->action) {
-                action_destroy(action->type, action->action);
-            }
+            // in order to not free this action, since it needs to survive, we set the pointer to NULL here. not the
+            // best solution, but is less to type
+            _action = NULL;
             break;
         }
     }
@@ -223,8 +229,6 @@ parse_modifiers(const char *str, uint32_t *modifiers) {
         } else if(strcasecmp(token, "super") == 0 || strcasecmp(token, "logo") == 0 || strcasecmp(token, "win") == 0 ||
                   strcasecmp(token, "mod4") == 0) {
             *modifiers |= WLR_MODIFIER_LOGO;
-        } else if(strcasecmp(token, "caps") == 0) {
-            *modifiers |= WLR_MODIFIER_CAPS;
         }
         token = strtok(NULL, "+");
     }
@@ -256,7 +260,7 @@ parse_keysym(const char *str, uint32_t *keysym) {
     } else {
         *keysym = xkb_keysym_from_name(str, 0);
         if(*keysym == 0) {
-            wlr_log(WLR_ERROR, "key %s doesn't seem right", str);
+            wlr_log(WLR_ERROR, "key '%s' doesn't seem right", str);
             return false;
         }
     }
@@ -410,6 +414,11 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         *dest = NULL;
         return true;
 
+    } else if(strcmp(word, "close") == 0) {
+        *out_type = ACTION_TYPE_CLOSE;
+        *dest = NULL;
+        return true;
+
     } else if(strcmp(word, "toggle_float") == 0) {
         *out_type = ACTION_TYPE_TOGGLE_FLOAT;
         *dest = NULL;
@@ -492,7 +501,24 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
 
     } else if(strcmp(word, "trackpad_disable_while_typing") == 0) {
         *out_type = ACTION_TYPE_TRACKPAD_DISABLE_WHILE_TYPING;
-        struct action_trackpad_disable_while_typing *action = ALLOC(struct action_trackpad_disable_while_typing);
+        struct action_trackpad_dwt *action = ALLOC(struct action_trackpad_dwt);
+        *dest = action;
+
+        if(!shell_parser_pop(parser, sizeof(word), word)) {
+            action_destroy(*out_type, *dest);
+            *dest = NULL;
+            return false;
+        }
+        if(!parse_bool(word, &action->enable)) {
+            action_destroy(*out_type, *dest);
+            *dest = NULL;
+            return false;
+        }
+        return true;
+
+    } else if(strcmp(word, "trackpad_tap_to_click") == 0) {
+        *out_type = ACTION_TYPE_TRACKPAD_TAP_TO_CLICK;
+        struct action_trackpad_tap_to_click *action = ALLOC(struct action_trackpad_tap_to_click);
         *dest = action;
 
         if(!shell_parser_pop(parser, sizeof(word), word)) {
@@ -622,6 +648,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
                 return false;
             }
         } else {
+            // if only a single one is provided we set it for both
             action->inner = action->outer;
         }
         return true;
@@ -684,6 +711,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
                 return false;
             }
         } else {
+            // both the same
             action->inactive = action->active;
         }
         return true;
@@ -722,8 +750,8 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         return false;
     } else if(strcmp(word, "create_keybind") == 0) {
         *out_type = ACTION_TYPE_CREATE_KEYBIND;
-        struct action_create_keybind *action = ALLOC(struct action_create_keybind);
-        *dest = action;
+        struct keybind *keybind = ALLOC(struct keybind);
+        *dest = keybind;
 
         if(!shell_parser_pop(parser, sizeof(word), word)) {
             action_destroy(*out_type, *dest);
@@ -732,7 +760,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         }
 
         if(strcmp(word, "--even_when_locked") == 0) {
-            action->even_when_locked = true;
+            keybind->even_when_locked = true;
             if(!shell_parser_pop(parser, sizeof(word), word)) {
                 action_destroy(*out_type, *dest);
                 *dest = NULL;
@@ -740,23 +768,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             }
         }
 
-        char *last_plus = strrchr(word, '+');
-        char *key_str = word;
-        char *mod_str = NULL;
-
-        if(last_plus) {
-            *last_plus = '\0';
-            mod_str = word;
-            key_str = last_plus + 1;
-        }
-
-        if(!parse_modifiers(mod_str, &action->modifiers)) {
-            action_destroy(*out_type, *dest);
-            *dest = NULL;
-            return false;
-        }
-
-        if(!parse_keysym(key_str, &action->key)) {
+        if(!parse_modifiers(word, &keybind->modifiers)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
@@ -768,7 +780,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             return false;
         }
 
-        if(!action_create(parser, &action->type, &action->action)) {
+        if(!parse_keysym(word, &keybind->key)) {
+            action_destroy(*out_type, *dest);
+            *dest = NULL;
+            return false;
+        }
+
+        // recurse here and create an action from the rest
+        if(!action_create(parser, &keybind->type, &keybind->action)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;

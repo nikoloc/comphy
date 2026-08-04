@@ -1,5 +1,6 @@
 #include "transaction.h"
 
+#include "comphy.h"
 #include "workspace.h"
 
 // thanks to `fx_comp` and `sway` for the implementation
@@ -92,9 +93,17 @@ all_ready(struct workspace *workspace) {
 
 static void
 commit(struct toplevel *toplevel) {
+    toplevel->current = toplevel->pending;
+
     // reenable the real buffer
     wlr_scene_node_destroy(&toplevel->snapshot_tree->node);
+    toplevel->snapshot_tree = NULL;
+
+    wlr_scene_node_set_position(&toplevel->scene_tree->node, toplevel->current.x, toplevel->current.y);
+
     wlr_scene_node_set_enabled(&toplevel->content_tree->node, true);
+    // TODO: fix harcoded
+    wlr_scene_rect_set_size(toplevel->border, toplevel->current.width + 6, toplevel->current.height + 6);
 }
 
 static void
@@ -139,20 +148,38 @@ idle(void *data) {
     struct toplevel *toplevel = data;
 
     transaction_commit(toplevel);
+    toplevel->transaction_schedule_idle = NULL;
 }
 
 void
 transaction_schedule_commit(struct state *state, struct toplevel *toplevel) {
     struct wl_event_loop *event_loop = wl_display_get_event_loop(state->display);
 
-    wl_event_loop_add_idle(event_loop, idle, toplevel);
+    toplevel->transaction_schedule_idle = wl_event_loop_add_idle(event_loop, idle, toplevel);
+}
+
+int
+transaction_time_out(void *data) {
+    struct toplevel *toplevel = data;
+
+    transaction_commit(toplevel);
+
+    wl_event_source_remove(toplevel->transaction_time_out);
+    toplevel->transaction_time_out = NULL;
+    return 0;
 }
 
 void
-transaction_mark_dirty(struct toplevel *toplevel) {
+transaction_mark_dirty(struct state *state, struct toplevel *toplevel) {
     toplevel->is_dirty = true;
 
     // create the snapshot tree to replace it until the new buffer is ready
     wlr_scene_node_set_enabled(&toplevel->content_tree->node, false);
     toplevel->snapshot_tree = scene_tree_snapshot(toplevel->content_tree);
+    // TODO: fix hardcoded
+    wlr_scene_node_set_position(&toplevel->snapshot_tree->node, 3, 3);
+
+    struct wl_event_loop *event_loop = wl_display_get_event_loop(state->display);
+    toplevel->transaction_time_out = wl_event_loop_add_timer(event_loop, transaction_time_out, toplevel);
+    wl_event_source_timer_update(toplevel->transaction_time_out, COMPHY_TRANSACTION_TIME_OUT_MS);
 }

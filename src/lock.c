@@ -4,10 +4,9 @@
 #include <wayland-util.h>
 #include <wlr/util/log.h>
 
-#include "layer.h"
-#include "rendering.h"
 #include "state.h"
 #include "toplevel.h"
+#include "util/macros.h"
 
 // void
 // handle_map(struct wl_listener *listener, void *data) {

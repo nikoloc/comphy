@@ -57,21 +57,12 @@ output_get_relative(struct state *state, struct output *output, enum wlr_directi
 struct output *
 output_find_by_name(struct state *state, char *name);
 
-bool
-output_transfer_existing_workspaces(struct state *state, struct output *output);
-
-struct workspace *
-output_find_owned_workspace(struct state *state, struct output *output);
+// bool
+// output_transfer_existing_workspaces(struct state *state, struct output *output);
+//
+// struct workspace *
+// output_find_owned_workspace(struct state *state, struct output *output);
 
 // take better functions from comphy-old
-
-bool
-output_apply_preffered_mode(struct wlr_output *wlr_output, struct wlr_output_state *state);
-
-void
-output_warp_cursor(struct state *state, struct output *output);
-
-void
-output_move_workspaces(struct output *dest, struct output *src);
 
 #endif

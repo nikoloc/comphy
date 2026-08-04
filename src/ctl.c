@@ -51,6 +51,8 @@ handle_command(int fd, u32 mask, void *data) {
         return 0;
     }
 
+    wlr_log(WLR_DEBUG, "new ctl cmd: %s", buffer);
+
     buffer[len] = 0;
     handle_request(state, client_fd, buffer);
 
@@ -88,8 +90,12 @@ ctl_init(struct ctl *ctl, struct wl_display *display) {
 
 void
 ctl_deinit(struct ctl *ctl) {
-    wl_event_source_remove(ctl->source);
+    if(ctl->source) {
+        wl_event_source_remove(ctl->source);
+    }
 
-    close(ctl->fd);
+    if(ctl->fd > 0) {
+        close(ctl->fd);
+    }
     unlink(COMPHYCTL_SOCKET);
 }
