@@ -7,6 +7,7 @@
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
 
+#include "action.h"
 #include "keybind.h"
 #include "state.h"
 #include "util/macros.h"
@@ -87,6 +88,7 @@ handle_keybinds(struct state *state, struct keyboard *keyboard, u32 keycode, int
             // TODO: how to handle long actions?
             if(syms[i] == iter->key && ((mods & ~consumed_mods & significant_mods) == iter->modifiers) &&
                     key_state == WL_KEYBOARD_KEY_STATE_RELEASED) {
+                wlr_log(WLR_ERROR, "action: %d", iter->type);
                 action_perform(state, iter->type, iter->action);
                 return true;
             }
@@ -107,6 +109,9 @@ handle_key(struct wl_listener *listener, void *data) {
 
     const xkb_keysym_t *syms;
     int count = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
+    for(int i = 0; i < count; i++) {
+        wlr_log(WLR_ERROR, "sym: %u", syms[i]);
+    }
 
     bool handled = handle_change_vt(state, count, syms);
 

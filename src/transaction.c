@@ -96,7 +96,7 @@ all_ready(struct workspace *workspace) {
 }
 
 static void
-commit(struct toplevel *toplevel) {
+commit(struct state *state, struct toplevel *toplevel) {
     toplevel->current = toplevel->pending;
 
     if(toplevel->needs_initial_enable) {
@@ -105,8 +105,8 @@ commit(struct toplevel *toplevel) {
     }
 
     wlr_scene_node_set_position(&toplevel->scene_tree->node, toplevel->current.x, toplevel->current.y);
-    // TODO: fix harcoded
-    wlr_scene_rect_set_size(toplevel->border, toplevel->current.width + 6, toplevel->current.height + 6);
+    wlr_scene_rect_set_size(toplevel->border, toplevel->current.width + 2 * state->config.border.width,
+            toplevel->current.height + 2 * state->config.border.width);
 
     if(toplevel->snapshot_tree) {
         wlr_scene_node_destroy(&toplevel->snapshot_tree->node);
@@ -117,9 +117,9 @@ commit(struct toplevel *toplevel) {
 }
 
 static void
-commit_all(struct workspace *workspace, bool unmark) {
+commit_all(struct state *state, struct workspace *workspace, bool unmark) {
     if(workspace->master) {
-        commit(workspace->master);
+        commit(state, workspace->master);
         if(unmark) {
             workspace->master->is_dirty = false;
         }
@@ -127,14 +127,14 @@ commit_all(struct workspace *workspace, bool unmark) {
 
     struct toplevel *iter;
     wl_list_for_each(iter, &workspace->floats, link) {
-        commit(iter);
+        commit(state, iter);
         if(unmark) {
             iter->is_dirty = false;
         }
     }
 
     wl_list_for_each(iter, &workspace->slaves, link) {
-        commit(iter);
+        commit(state, iter);
         if(unmark) {
             iter->is_dirty = false;
         }
@@ -142,7 +142,7 @@ commit_all(struct workspace *workspace, bool unmark) {
 }
 
 void
-transaction_commit(struct toplevel *toplevel) {
+transaction_commit(struct state *state, struct toplevel *toplevel) {
     wlr_log(WLR_DEBUG, "toplevel '%p' transaction commit", (void *)toplevel);
 
     toplevel->is_dirty = false;
@@ -151,7 +151,7 @@ transaction_commit(struct toplevel *toplevel) {
 
     if(toplevel->state == TOPLEVEL_STATE_FULLSCREEN) {
         // dont need anything else
-        commit(toplevel);
+        commit(state, toplevel);
         return;
     }
 
@@ -170,14 +170,15 @@ transaction_commit(struct toplevel *toplevel) {
         workspace->transaction_time_out = NULL;
     }
 
-    commit_all(workspace, false);
+    commit_all(state, workspace, false);
 }
 
 static void
 idle(void *data) {
     struct toplevel *toplevel = data;
+    struct state *state = state_get();
 
-    transaction_commit(toplevel);
+    transaction_commit(state, toplevel);
     toplevel->transaction_schedule_idle = NULL;
 }
 
@@ -195,13 +196,14 @@ transaction_schedule_commit(struct state *state, struct toplevel *toplevel) {
 int
 transaction_time_out(void *data) {
     struct workspace *workspace = data;
+    struct state *state = state_get();
 
     wlr_log(WLR_DEBUG, "transaction for workspace '%d' timed out", workspace->idx);
 
     wl_event_source_remove(workspace->transaction_time_out);
     workspace->transaction_time_out = NULL;
 
-    commit_all(workspace, true);
+    commit_all(state, workspace, true);
 
     return 0;
 }

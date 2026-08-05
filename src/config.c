@@ -10,6 +10,9 @@
 #include <wayland-util.h>
 #include <wlr/util/log.h>
 
+#include "keybind.h"
+#include "util/memory.h"
+
 //         pointer = true;
 //         key = key + 8;
 //         if(strcmp(key, "left_click") == 0) {
@@ -25,7 +28,6 @@
 void
 config_init(struct config *config) {
     wl_list_init(&config->keybinds);
-    wl_list_init(&config->pointer_keybinds);
 
     config->keyboard.rate = 20;
     config->keyboard.delay = 200;
@@ -41,5 +43,16 @@ config_init(struct config *config) {
 
 void
 config_deinit(struct config *config) {
-    // TODO
+    {
+        struct keybind *iter, *temp;
+        wl_list_for_each_safe(iter, temp, &config->keybinds, link) {
+            keybind_destroy(iter);
+        }
+    }
+
+    FREE(config->keyboard.xkb_layouts);
+    FREE(config->keyboard.xkb_variants);
+    FREE(config->keyboard.xkb_options);
+
+    // TODO: pointer_rules and toplevel_rules
 }

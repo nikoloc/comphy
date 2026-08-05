@@ -141,7 +141,7 @@ handle_destroy(struct wl_listener *listener, void *data) {
     wlr_log(WLR_DEBUG, "destroying output '%s'", output->wlr_output->name);
 
     if(!state->is_exiting) {
-        struct wl_list *next = wl_list_get_next_or_prev(&state->outputs, &output->link);
+        struct wl_list *next = wl_list_next_or_prev(&state->outputs, &output->link);
         if(next) {
             struct output *next_output = CONTAINER_OF(next, struct output, link);
             // TODO: orphans

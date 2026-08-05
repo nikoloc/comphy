@@ -8,8 +8,6 @@
 #include "toplevel.h"
 #include "util/shell_parser.h"
 
-// these next two functions are ai generated in `action_parser.c` from the specification found in the
-// `comphyctl_commands.txt`
 bool
 action_create(struct shell_parser *parser, enum action_type *out_type, void **dest);
 

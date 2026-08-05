@@ -8,12 +8,11 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
-#include "action.h"
+#include "action_types.h"
 #include "color.h"
 
 struct config {
     struct wl_list keybinds;
-    struct wl_list pointer_keybinds;
 
     struct {
         char *xkb_layouts, *xkb_variants, *xkb_options;

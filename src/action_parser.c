@@ -17,6 +17,11 @@
 
 void
 action_destroy(enum action_type type, void *_action) {
+    if(!_action) {
+        // may happen with non fully inited keybinds
+        return;
+    }
+
     switch(type) {
         case ACTION_TYPE_CREATE_WORKSPACE: {
             struct action_create_workspace *action = _action;
@@ -753,8 +758,10 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         struct keybind *keybind = ALLOC(struct keybind);
         *dest = keybind;
 
+        // NOTE: unlike for other actions, since the `keybind` object is long-lived, `action_destroy()` does not destrot
+        // it, so we do that here manually with `FREE()`
         if(!shell_parser_pop(parser, sizeof(word), word)) {
-            action_destroy(*out_type, *dest);
+            FREE(keybind);
             *dest = NULL;
             return false;
         }
@@ -762,33 +769,33 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         if(strcmp(word, "--even_when_locked") == 0) {
             keybind->even_when_locked = true;
             if(!shell_parser_pop(parser, sizeof(word), word)) {
-                action_destroy(*out_type, *dest);
+                FREE(keybind);
                 *dest = NULL;
                 return false;
             }
         }
 
         if(!parse_modifiers(word, &keybind->modifiers)) {
-            action_destroy(*out_type, *dest);
+            FREE(keybind);
             *dest = NULL;
             return false;
         }
 
         if(!shell_parser_pop(parser, sizeof(word), word)) {
-            action_destroy(*out_type, *dest);
+            FREE(keybind);
             *dest = NULL;
             return false;
         }
 
         if(!parse_keysym(word, &keybind->key)) {
-            action_destroy(*out_type, *dest);
+            FREE(keybind);
             *dest = NULL;
             return false;
         }
 
         // recurse here and create an action from the rest
         if(!action_create(parser, &keybind->type, &keybind->action)) {
-            action_destroy(*out_type, *dest);
+            FREE(keybind);
             *dest = NULL;
             return false;
         }

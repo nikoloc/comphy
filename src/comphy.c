@@ -28,6 +28,7 @@
 #include "cursor.h"
 #include "decoration.h"
 #include "gamma_control.h"
+#include "keybind.h"
 #include "scene.h"
 #include "seat.h"
 #include "state.h"

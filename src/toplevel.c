@@ -101,13 +101,10 @@ handle_map(struct wl_listener *listener, void *data) {
 
     // create the scene stuff
     toplevel->content_tree = wlr_scene_xdg_surface_create(toplevel->scene_tree, toplevel->wlr_toplevel->base);
-    // TODO: fix hardcoded
-    wlr_scene_node_set_position(&toplevel->content_tree->node, 3, 3);
+    wlr_scene_node_set_position(&toplevel->content_tree->node, state->config.border.width, state->config.border.width);
 
-    // create the border
-    float color[4] = {0.0f, 255.0f, 0.0f, 255.0f};
-    // TODO: fix harcoded
-    // color_to_wlr_color(state->config.border.color.inactive, color);
+    float color[4];
+    color_to_wlr_color(state->config.border.color.inactive, color);
     toplevel->border = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, color);
     wlr_scene_node_lower_to_bottom(&toplevel->border->node);
 
@@ -120,7 +117,7 @@ handle_map(struct wl_listener *listener, void *data) {
             layout_add(workspace, toplevel);
             // immediately reconfigure the layout so the right size is sent to the client. NOTE: this is not ideal,
             // since we request another state from the client, but working around it creates a lot more work i am not
-            // doing rn.
+            // doing rn. current way needs disabling the node before the first transaction commit tho.
             layout_configure(state, workspace);
             wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
             toplevel->needs_initial_enable = true;
@@ -140,7 +137,7 @@ handle_map(struct wl_listener *listener, void *data) {
             }
 
             // here we dont need the extra configure, just commit the state as is
-            transaction_commit(toplevel);
+            transaction_commit(state, toplevel);
             break;
         }
         default: {
@@ -155,7 +152,7 @@ handle_map(struct wl_listener *listener, void *data) {
 static struct toplevel *
 find_next_to_focus_from_prev(struct toplevel *toplevel) {
     if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
-        struct wl_list *next = wl_list_get_next_or_prev(&toplevel->workspace->floats, &toplevel->link);
+        struct wl_list *next = wl_list_next_or_prev(&toplevel->workspace->floats, &toplevel->link);
         if(next) {
             return CONTAINER_OF(next, struct toplevel, link);
         }
@@ -177,7 +174,7 @@ find_next_to_focus_from_prev(struct toplevel *toplevel) {
         return NULL;
     }
 
-    struct wl_list *next = wl_list_get_next_or_prev(&toplevel->workspace->slaves, &toplevel->link);
+    struct wl_list *next = wl_list_next_or_prev(&toplevel->workspace->slaves, &toplevel->link);
     if(next) {
         return CONTAINER_OF(next, struct toplevel, link);
     }
@@ -295,7 +292,7 @@ handle_commit(struct wl_listener *listener, void *data) {
             center_float(toplevel);
         }
 
-        transaction_commit(toplevel);
+        transaction_commit(state, toplevel);
         return;
     }
 
@@ -308,14 +305,14 @@ handle_commit(struct wl_listener *listener, void *data) {
     if(serial < toplevel->configure_serial) {
         wlr_log(WLR_DEBUG, "toplevel commited but old serial");
         // send a frame event, this makes the client commit a new buffer, conforming to our new state, in order to
-        // conform to our transaction state
+        // conform to our transaction state. kinda hacky, but thats just how clients operate under wayland
         send_frame_done(toplevel);
         return;
     }
 
     // commit the new state for this toplevel. this will check for all the other toplevels on the screen and finalize
     // the state for the output if everything is perfect, else its going to wait for others
-    transaction_commit(toplevel);
+    transaction_commit(state, toplevel);
 }
 
 static void
@@ -503,7 +500,7 @@ void
 toplevel_focus(struct state *state, struct toplevel *toplevel) {
     if(state->lock_mgr.lock || state->focused_lock || state->is_exclusive ||
             (state->grabbed_toplevel && toplevel != state->grabbed_toplevel) ||
-            (toplevel->workspace->fullscreen && toplevel != toplevel->workspace->fullscreen)) {
+            (toplevel && toplevel->workspace->fullscreen && toplevel != toplevel->workspace->fullscreen)) {
         return;
     }
 
@@ -517,12 +514,19 @@ toplevel_focus(struct state *state, struct toplevel *toplevel) {
         // unfocus it
         wlr_xdg_toplevel_set_activated(prev->wlr_toplevel, false);
         wlr_foreign_toplevel_handle_v1_set_activated(prev->foreign_toplevel_handle, false);
+        toplevel_set_border_color(prev, state->config.border.color.inactive);
+    }
+
+    if(!toplevel) {
+        // this means we just wanted to unfocus whatever was focused
+        return;
     }
 
     state->focused_toplevel = toplevel;
 
     wlr_xdg_toplevel_set_activated(toplevel->wlr_toplevel, true);
     wlr_foreign_toplevel_handle_v1_set_activated(toplevel->foreign_toplevel_handle, true);
+    toplevel_set_border_color(toplevel, state->config.border.color.active);
 
     struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(state->seat.wlr_seat);
     if(keyboard) {
@@ -533,6 +537,7 @@ toplevel_focus(struct state *state, struct toplevel *toplevel) {
 
 void
 toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace) {
+    // TODO
 }
 
 u32
@@ -556,6 +561,13 @@ toplevel_get_corner_closest_to(struct toplevel *toplevel, int x, int y) {
     }
 
     return edges;
+}
+
+void
+toplevel_set_border_color(struct toplevel *toplevel, color_t color) {
+    float wlr_color[4];
+    color_to_wlr_color(color, wlr_color);
+    wlr_scene_rect_set_color(toplevel->border, wlr_color);
 }
 
 static void
@@ -640,9 +652,10 @@ toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_bo
     toplevel->pending = *box;
 
     if(toplevel->current.width == toplevel->pending.width && toplevel->current.height == toplevel->pending.height) {
-        // since we might be in the middle of `layout_configure()` here, we dont want to commit it right away, as we
-        // need to wait for all other toplevels to be informed about its new state. hence, we delay the commit in the
-        // event loop, meaning its going to be performed after the current event is processed at least.
+        // since we might be in the middle of `layout_configure()` here, we dont want to commit it right
+        // away, as we need to wait for all other toplevels to be informed about its new state. hence, we
+        // delay the commit in the event loop, meaning its going to be performed after the current event is
+        // processed at least.
         transaction_schedule_commit(state, toplevel);
         return;
     };

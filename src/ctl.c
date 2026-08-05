@@ -5,7 +5,9 @@
 #include <unistd.h>
 #include <wlr/util/log.h>
 
+#include "action.h"
 #include "comphy.h"
+#include "keybind.h"
 #include "state.h"
 #include "util/macros.h"
 #include "util/shell_parser.h"
@@ -27,6 +29,11 @@ handle_request(struct state *state, int fd, char *buffer) {
 
     action_perform(state, type, action);
     action_destroy(type, action);
+
+    struct keybind *iter;
+    wl_list_for_each(iter, &state->keybinds, link) {
+        wlr_log(WLR_ERROR, "action: %d, key: %u, mods: %u", iter->type, iter->key, iter->modifiers);
+    }
 }
 
 static int

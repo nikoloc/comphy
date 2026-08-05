@@ -5,6 +5,7 @@
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_xdg_shell.h>
 
+#include "color.h"
 #include "util/ints.h"
 #include "view.h"
 
@@ -84,5 +85,8 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
 
 u32
 toplevel_get_corner_closest_to(struct toplevel *toplevel, int x, int y);
+
+void
+toplevel_set_border_color(struct toplevel *toplevel, color_t color);
 
 #endif

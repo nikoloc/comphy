@@ -20,10 +20,11 @@ struct keybind {
 
 struct state;
 
-bool
-keybind_check(struct state *state, u32 modifiers, u32 keycode, enum wl_keyboard_key_state key_state);
-
-bool
-keybind_check_change_vt(struct state *state, size_t count, const xkb_keysym_t *keysyms);
+// keybinds are created inside of the `create_keybind` action handler in `action_create()`, but they dont get destroyed
+// by the subsequent call to `action_destroy()` since they live in the `state->keybinds` list. thus, we need to destroy
+// them explicitly afterwards. NOTE: should only be called on already created keybinds, not if the keybind creation
+// fails inside `action_create()`, see also notes there
+void
+keybind_destroy(struct keybind *keybind);
 
 #endif
