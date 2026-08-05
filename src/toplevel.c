@@ -287,6 +287,7 @@ handle_commit(struct wl_listener *listener, void *data) {
         struct wlr_box *geometry = &toplevel->wlr_toplevel->base->geometry;
         toplevel->pending.width = geometry->width;
         toplevel->pending.height = geometry->height;
+        wlr_log(WLR_DEBUG, "toplevel '%p' changed size to %dx%d", (void *)toplevel, geometry->width, geometry->height);
 
         if(toplevel->needs_centering) {
             center_float(toplevel);

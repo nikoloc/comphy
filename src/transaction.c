@@ -149,13 +149,17 @@ transaction_commit(struct state *state, struct toplevel *toplevel) {
 
     // TODO: handle grabbed
 
+    struct workspace *workspace = toplevel->workspace;
     if(toplevel->state == TOPLEVEL_STATE_FULLSCREEN) {
         // dont need anything else
         commit(state, toplevel);
+        if(workspace->transaction_time_out) {
+            wl_event_source_remove(workspace->transaction_time_out);
+            workspace->transaction_time_out = NULL;
+        }
         return;
     }
 
-    struct workspace *workspace = toplevel->workspace;
     if(!all_ready(workspace)) {
         wlr_log(WLR_DEBUG, "transaction not ready yet");
         // transaction not ready

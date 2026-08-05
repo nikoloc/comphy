@@ -15,6 +15,43 @@
 #include "wlr/util/log.h"
 #include "workspace.h"
 
+static void
+toggle_float(struct state *state) {
+    struct toplevel *toplevel = state->focused_toplevel;
+    if(!toplevel) {
+        return;
+    }
+
+    switch(toplevel->state) {
+        case TOPLEVEL_STATE_TILED: {
+            struct workspace *workspace = toplevel->workspace;
+            layout_remove(toplevel);
+            wl_list_insert(&workspace->floats, &toplevel->link);
+            toplevel->state = TOPLEVEL_STATE_FLOAT;
+
+            // TODO: unset hacks
+            layout_configure(state, workspace);
+            toplevel_configure(state, toplevel, &(struct wlr_box){0});
+            toplevel->needs_centering = true;
+            break;
+        }
+        case TOPLEVEL_STATE_FLOAT: {
+            struct workspace *workspace = toplevel->workspace;
+            wl_list_remove(&toplevel->link);
+            layout_add(workspace, toplevel);
+            toplevel->state = TOPLEVEL_STATE_TILED;
+            // TODO: set hacks
+
+            layout_configure(state, workspace);
+            break;
+        }
+        case TOPLEVEL_STATE_FULLSCREEN: {
+            // no op
+            break;
+        }
+    }
+}
+
 static inline color_t
 get_color(struct state *state, struct toplevel *toplevel) {
     return toplevel == state->focused_toplevel ? state->config.border.color.active : state->config.border.color.active;
@@ -288,36 +325,7 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             break;
         }
         case ACTION_TYPE_TOGGLE_FLOAT: {
-            struct toplevel *toplevel = state->focused_toplevel;
-            if(!toplevel) {
-                break;
-            }
-
-            switch(toplevel->state) {
-                case TOPLEVEL_STATE_TILED: {
-                    struct workspace *workspace = toplevel->workspace;
-                    layout_remove(toplevel);
-                    wl_list_insert(&workspace->floats, &toplevel->link);
-
-                    layout_configure(state, workspace);
-                    toplevel_configure(state, toplevel, &(struct wlr_box){0});
-                    toplevel->needs_centering = true;
-                    break;
-                }
-                case TOPLEVEL_STATE_FLOAT: {
-                    struct workspace *workspace = toplevel->workspace;
-                    wl_list_remove(&toplevel->link);
-                    layout_add(workspace, toplevel);
-
-                    layout_configure(state, workspace);
-                    break;
-                }
-                case TOPLEVEL_STATE_FULLSCREEN: {
-                    // no op
-                    break;
-                }
-            }
-
+            toggle_float(state);
             break;
         }
         case ACTION_TYPE_TOGGLE_FULLSCREEN: {
