@@ -48,8 +48,10 @@ layout_configure(struct state *state, struct workspace *workspace) {
 
     struct output *output = workspace->output;
 
-    int outer_gaps = state->config.gaps.outer;
-    int inner_gaps = state->config.gaps.inner;
+    bool smart_gaps = state->config.gaps.smart && wl_list_empty(&workspace->slaves);
+
+    int outer_gaps = smart_gaps ? 0 : state->config.gaps.outer;
+    int inner_gaps = smart_gaps ? 0 : state->config.gaps.inner;
     float master_ratio = state->config.master_ratio;
 
     struct wlr_box full_area = output->usable_area;

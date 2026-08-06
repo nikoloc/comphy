@@ -120,6 +120,9 @@ action_destroy(enum action_type type, void *_action) {
         case ACTION_TYPE_MASTER_RATIO: {
             break;
         }
+        case ACTION_TYPE_CLIENT_SIDE_DECORATIONS: {
+            break;
+        }
         case ACTION_TYPE_TOPLEVEL_RULE: {
             // TODO: implement
             break;
@@ -741,6 +744,23 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             }
         }
         if(!parse_float(word, &action->value)) {
+            action_destroy(*out_type, *dest);
+            *dest = NULL;
+            return false;
+        }
+        return true;
+
+    } else if(strcmp(word, "client_side_decorations") == 0) {
+        *out_type = ACTION_TYPE_CLIENT_SIDE_DECORATIONS;
+        struct action_csd *action = ALLOC(struct action_csd);
+        *dest = action;
+
+        if(!shell_parser_pop(parser, sizeof(word), word)) {
+            action_destroy(*out_type, *dest);
+            *dest = NULL;
+            return false;
+        }
+        if(!parse_bool(word, &action->enable)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;

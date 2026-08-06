@@ -2,9 +2,13 @@
 #define RULES_H
 
 #include <stdbool.h>
+#include <wayland-util.h>
 
 #include "toplevel.h"
 #include "util/ints.h"
+
+// all the rules in `comphy` are static, meaning they are not going to be reevaluated on any of the matched state
+// changing, but instead only when needed.
 
 enum pointer_rule_field {
     POINTER_RULE_FIELD_MATCH_NAME = (1 << 0),
@@ -24,36 +28,38 @@ struct pointer_rule {
     float sensitivity;
     bool acceleration;
     bool left_handed;
+
+    struct wl_list link;
 };
 
 enum toplevel_rule_field {
     TOPLEVEL_RULE_FIELD_MATCH_APP_ID = (1 << 0),
     TOPLEVEL_RULE_FIELD_MATCH_TITLE = (1 << 1),
-    TOPLEVEL_RULE_FIELD_MATCH_STATE = (1 << 2),
 
-    TOPLEVEL_RULE_FIELD_CLIENT_SIDE_DECORATIONS = (1 << 3),
-    TOPLEVEL_RULE_FIELD_OPACITY_ACTIVE = (1 << 4),
-    TOPLEVEL_RULE_FIELD_OPACITY_INACTIVE = (1 << 5),
-    TOPLEVEL_RULE_FIELD_DEFAULT_STATE = (1 << 6),
-    TOPLEVEL_RULE_FIELD_DEFAULT_WIDTH = (1 << 7),
-    TOPLEVEL_RULE_FIELD_DEFAULT_HEIGHT = (1 << 8),
+    TOPLEVEL_RULE_FIELD_STATE = (1 << 2),
+    TOPLEVEL_RULE_FIELD_WIDTH = (1 << 3),
+    TOPLEVEL_RULE_FIELD_HEIGHT = (1 << 4),
 };
 
 struct toplevel_rule {
     u32 fields;
 
     struct {
-        char *app_id;
-        char *title;
+        char *app_id, *title;
         enum toplevel_state state;
     } match;
 
-    bool client_side_decorations;
-    float opacity_active;
-    float opacity_inactive;
-    enum toplevel_state default_state;
-    i32 default_width;
-    i32 default_height;
+    enum toplevel_state state;
+    int width, height;
+
+    struct wl_list link;
 };
+
+// similar note as for the `keybind_destroy()`
+void
+toplevel_rule_destroy(struct toplevel_rule *rule);
+
+void
+pointer_rule_destroy(struct toplevel_rule *rule);
 
 #endif

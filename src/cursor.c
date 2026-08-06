@@ -177,10 +177,14 @@ handle_request_set_shape(struct wl_listener *listener, void *data) {
     struct wlr_cursor_shape_manager_v1_request_set_shape_event *event = data;
     struct state *state = state_get();
 
+    if(state->operation && state->operation_server_inited) {
+        return;
+    }
+
     struct wlr_seat_client *focused_client = state->seat.wlr_seat->pointer_state.focused_client;
     if(focused_client == event->seat_client) {
         const char *name = wlr_cursor_shape_v1_name(event->shape);
-        wlr_cursor_set_xcursor(state->cursor.wlr_cursor, state->cursor.xcursor_mgr, name);
+        cursor_set_image(state, (char *)name);
     }
 }
 
@@ -207,7 +211,6 @@ cursor_init(struct cursor *cursor, struct wlr_output_layout *output_layout) {
     cursor->wlr_cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(cursor->wlr_cursor, output_layout);
 
-    // TODO: is there a default theme with no manager or we need to set it?
     cursor_set_theme(cursor, "Adwaita", 24);
 
     cursor->motion.notify = handle_motion;

@@ -17,6 +17,7 @@
 #include "list_helpers.h"
 #include "output.h"
 #include "pointer.h"
+#include "rules.h"
 #include "transaction.h"
 #include "util/macros.h"
 #include "util/memory.h"
@@ -24,27 +25,59 @@
 #include "workspace.h"
 
 static bool
-should_float(struct state *state, struct toplevel *toplevel) {
-    // we make toplevels float if they have fixed size or are children of another toplevel
-    bool natural = (toplevel->wlr_toplevel->current.max_height > 0 &&
-                           toplevel->wlr_toplevel->current.max_height == toplevel->wlr_toplevel->current.min_height) ||
-                   (toplevel->wlr_toplevel->current.max_width > 0 &&
-                           toplevel->wlr_toplevel->current.max_width == toplevel->wlr_toplevel->current.min_width) ||
-                   toplevel->wlr_toplevel->parent;
-
-    if(natural) {
-        return true;
+matches_rule(struct toplevel *toplevel, struct toplevel_rule *rule) {
+    if((rule->fields & TOPLEVEL_RULE_FIELD_MATCH_APP_ID) &&
+            !strstr(toplevel->wlr_toplevel->app_id, rule->match.app_id)) {
+        return false;
     }
 
-    // TODO: go through the rules
-    // struct window_rule_float *w;
-    // wl_list_for_each(w, &server.config->window_rules.floating, link) {
-    //     if(toplevel_matches_window_rule(toplevel, &w->condition)) {
-    //         return true;
-    //     }
-    // }
+    if((rule->fields & TOPLEVEL_RULE_FIELD_MATCH_TITLE) && !strstr(toplevel->wlr_toplevel->title, rule->match.title)) {
+        return false;
+    }
 
-    return false;
+    return true;
+}
+
+static inline bool
+should_float(struct toplevel *toplevel) {
+    // we make toplevels float if they have fixed size or are children of another toplevel
+    return (toplevel->wlr_toplevel->current.max_height > 0 &&
+                   toplevel->wlr_toplevel->current.max_height == toplevel->wlr_toplevel->current.min_height) ||
+           (toplevel->wlr_toplevel->current.max_width > 0 &&
+                   toplevel->wlr_toplevel->current.max_width == toplevel->wlr_toplevel->current.min_width) ||
+           toplevel->wlr_toplevel->parent;
+}
+
+static enum toplevel_state
+default_state(struct state *state, struct toplevel *toplevel) {
+    struct toplevel_rule *iter;
+    wl_list_for_each(iter, &state->config.toplevel_rules, link) {
+        if((iter->fields & TOPLEVEL_RULE_FIELD_STATE) && matches_rule(toplevel, iter)) {
+            return iter->state;
+        }
+    }
+
+    if(should_float(toplevel)) {
+        return TOPLEVEL_STATE_FLOAT;
+    }
+
+    return TOPLEVEL_STATE_TILED;
+}
+
+static void
+default_size(struct state *state, struct toplevel *toplevel, int *width, int *height) {
+    *width = 0, *height = 0;
+
+    struct toplevel_rule *iter;
+    wl_list_for_each(iter, &state->config.toplevel_rules, link) {
+        if((iter->fields & TOPLEVEL_RULE_FIELD_WIDTH) && matches_rule(toplevel, iter)) {
+            *width = iter->width;
+        }
+
+        if((iter->fields & TOPLEVEL_RULE_FIELD_HEIGHT) && matches_rule(toplevel, iter)) {
+            *height = iter->height;
+        }
+    }
 }
 
 static void
@@ -58,23 +91,17 @@ center_float(struct toplevel *toplevel) {
     toplevel->needs_centering = false;
 }
 
-static enum toplevel_state
-default_state(struct state *state, struct toplevel *toplevel) {
-    if(should_float(state, toplevel)) {
-        return TOPLEVEL_STATE_FLOAT;
-    }
+void
+toplevel_update_state(struct toplevel *toplevel, enum toplevel_state state) {
+    toplevel->state = state;
+    toplevel->needs_reparenting = true;
 
-    return TOPLEVEL_STATE_TILED;
-}
+    // in order for the clients to react better to our demands in tiled mode, we tell it that its maximized and
+    // tiled on all sides. this makes the client not draw stuff such as rounded corners, shadows and usually
+    // means the client will respect our desired size more than if not
+    wlr_xdg_toplevel_set_maximized(toplevel->wlr_toplevel, toplevel->state == TOPLEVEL_STATE_TILED);
 
-static void
-set_tiled_hacks(struct toplevel *toplevel, bool is_tiled) {
-    // in order for the clients to react better to our demands in tiled mode, we tell it that its maximized and tiled on
-    // all sides. this makes the client not draw stuff such as rounded corners, shadows and usually means the client
-    // will respect our desired size more than if not
-    wlr_xdg_toplevel_set_maximized(toplevel->wlr_toplevel, is_tiled);
-
-    if(is_tiled) {
+    if(toplevel->state == TOPLEVEL_STATE_TILED) {
         wlr_xdg_toplevel_set_tiled(toplevel->wlr_toplevel,
                 WLR_EDGE_TOP | WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT);
     } else {
@@ -101,7 +128,6 @@ handle_map(struct wl_listener *listener, void *data) {
 
     // create the scene stuff
     toplevel->content_tree = wlr_scene_xdg_surface_create(toplevel->scene_tree, toplevel->wlr_toplevel->base);
-    wlr_scene_node_set_position(&toplevel->content_tree->node, state->config.border.width, state->config.border.width);
 
     float color[4];
     color_to_wlr_color(state->config.border.color.inactive, color);
@@ -244,11 +270,42 @@ handle_unmap(struct wl_listener *listener, void *data) {
     }
 }
 
+void
+send_frame_done_iter(struct wlr_scene_node *node, struct timespec *now) {
+    switch(node->type) {
+        case WLR_SCENE_NODE_TREE: {
+            struct wlr_scene_tree *tree = wlr_scene_tree_from_node(node);
+            wl_list_for_each(node, &tree->children, link) {
+                send_frame_done_iter(node, now);
+            }
+            break;
+        }
+        case WLR_SCENE_NODE_RECT: {
+            break;
+        }
+        case WLR_SCENE_NODE_BUFFER: {
+            struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(node);
+            struct wlr_scene_surface *scene_surface = wlr_scene_surface_try_from_buffer(buffer);
+            if(scene_surface) {
+                wlr_surface_send_frame_done(scene_surface->surface, now);
+            }
+            break;
+        }
+    }
+}
+
 static void
 send_frame_done(struct toplevel *toplevel) {
     struct timespec now = time_now_timespec();
+    send_frame_done_iter(&toplevel->scene_tree->node, &now);
+}
 
-    wlr_surface_send_frame_done(toplevel->wlr_toplevel->base->surface, &now);
+static bool
+should_have_border(struct state *state, struct toplevel *toplevel) {
+    bool smart_gaps = state->config.gaps.smart && toplevel == toplevel->workspace->master &&
+                      wl_list_empty(&toplevel->workspace->slaves);
+
+    return toplevel->state != TOPLEVEL_STATE_FULLSCREEN && !smart_gaps;
 }
 
 static void
@@ -271,14 +328,14 @@ handle_commit(struct wl_listener *listener, void *data) {
         // tell it to choose its own size
         int width = 0, height = 0;
         if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
-            // TODO: actaully lookup rules
-            // toplevel_floating_size(toplevel, &width, &height);
+            default_size(state, toplevel, &width, &height);
             toplevel->needs_centering = true;
         }
 
         wlr_xdg_toplevel_set_size(toplevel->wlr_toplevel, width, height);
         wlr_xdg_toplevel_set_wm_capabilities(toplevel->wlr_toplevel, WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN);
-        set_tiled_hacks(toplevel, toplevel->state == TOPLEVEL_STATE_TILED);
+        // in order for the hacks to be sent
+        toplevel_update_state(toplevel, toplevel->state);
         return;
     }
 
@@ -288,6 +345,12 @@ handle_commit(struct wl_listener *listener, void *data) {
         toplevel->pending.width = geometry->width;
         toplevel->pending.height = geometry->height;
         wlr_log(WLR_DEBUG, "toplevel '%p' changed size to %dx%d", (void *)toplevel, geometry->width, geometry->height);
+
+        // need to add the border size to the box
+        if(should_have_border(state, toplevel)) {
+            toplevel->pending.width += 2 * state->config.border.width;
+            toplevel->pending.height += 2 * state->config.border.width;
+        }
 
         if(toplevel->needs_centering) {
             center_float(toplevel);
@@ -357,7 +420,7 @@ handle_request_move(struct wl_listener *listener, void *data) {
         return;
     }
 
-    operation_start_move(state, toplevel);
+    operation_start_move(state, toplevel, false);
 }
 
 static void
@@ -371,7 +434,7 @@ handle_request_resize(struct wl_listener *listener, void *data) {
         return;
     }
 
-    operation_start_resize(state, toplevel, event->edges);
+    operation_start_resize(state, toplevel, event->edges, false);
 }
 
 static void
@@ -584,11 +647,10 @@ set_fullscreen(struct state *state, struct toplevel *toplevel) {
     toplevel->prev_geometry = toplevel->current;
 
     workspace->fullscreen = toplevel;
-    toplevel->state = TOPLEVEL_STATE_FULLSCREEN;
+    toplevel_update_state(toplevel, TOPLEVEL_STATE_FULLSCREEN);
 
     wlr_xdg_toplevel_set_fullscreen(toplevel->wlr_toplevel, true);
     toplevel_configure(state, toplevel, &output->full_area);
-    wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.fullscreen);
 
     wlr_foreign_toplevel_handle_v1_set_fullscreen(toplevel->foreign_toplevel_handle, true);
 }
@@ -604,12 +666,9 @@ unset_fullscreen(struct state *state, struct toplevel *toplevel) {
 
     wlr_xdg_toplevel_set_fullscreen(toplevel->wlr_toplevel, false);
 
-    toplevel->state = toplevel->prev_state;
+    toplevel_update_state(toplevel, toplevel->prev_state);
     if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
         toplevel_configure(state, toplevel, &toplevel->prev_geometry);
-        wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.floats);
-    } else {
-        wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.tiled);
     }
 
     layout_configure(state, workspace);
@@ -648,11 +707,40 @@ toplevel_float_largest_output_intersection(struct state *state, struct toplevel 
     return output;
 }
 
+static void
+send_size(struct state *state, struct toplevel *toplevel, int width, int height) {
+    toplevel->requested_width = width;
+    toplevel->requested_height = height;
+    toplevel->configure_serial = wlr_xdg_toplevel_set_size(toplevel->wlr_toplevel, width, height);
+    transaction_mark_dirty(state, toplevel);
+}
+
 void
 toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_box *box) {
     toplevel->pending = *box;
+    toplevel->has_border = should_have_border(state, toplevel);
 
-    if(toplevel->current.width == toplevel->pending.width && toplevel->current.height == toplevel->pending.height) {
+    if(box->width <= 0 || box->height <= 0) {
+        // should choose its own size
+        send_size(state, toplevel, 0, 0);
+        return;
+    }
+
+    // we need to subract the decorations from this toplevel. currently the only type of decoration is the border,
+    // but that may change in the future
+    int width = box->width;
+    int height = box->height;
+
+    if(toplevel->has_border) {
+        width -= 2 * state->config.border.width;
+        height -= 2 * state->config.border.width;
+    }
+
+    // patch this so we dont get negative width/height
+    width = MAX(width, 1);
+    height = MAX(height, 1);
+
+    if(width == toplevel->requested_width && height == toplevel->requested_height) {
         // since we might be in the middle of `layout_configure()` here, we dont want to commit it right
         // away, as we need to wait for all other toplevels to be informed about its new state. hence, we
         // delay the commit in the event loop, meaning its going to be performed after the current event is
@@ -661,86 +749,9 @@ toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_bo
         return;
     };
 
-    toplevel->configure_serial = wlr_xdg_toplevel_set_size(toplevel->wlr_toplevel, box->width, box->height);
-    transaction_mark_dirty(state, toplevel);
+    send_size(state, toplevel, width, height);
 }
 
-// void
-// toplevel_recheck_opacity_rules(struct mwc_toplevel *toplevel) {
-//   /* check if it satisfies some window rule */
-//   struct window_rule_opacity *w;
-//   bool set = false;
-//   wl_list_for_each(w, &server.config->window_rules.opacity, link) {
-//     if(toplevel_matches_window_rule(toplevel, &w->condition)) {
-//       toplevel->inactive_opacity = w->inactive_value;
-//       toplevel->active_opacity = w->active_value;
-//       set = true;
-//       break;
-//     }
-//   }
-//
-//   if(!set) {
-//     toplevel->inactive_opacity = server.config->inactive_opacity;
-//     toplevel->active_opacity = server.config->active_opacity;
-//   }
-// }
-//
-// bool
-// toplevel_matches_window_rule(struct mwc_toplevel *toplevel,
-//                              struct window_rule_regex *condition) {
-//   char *app_id = toplevel->xdg_toplevel->app_id;
-//   char *title = toplevel->xdg_toplevel->title;
-//
-//   bool matches_app_id;
-//   if(condition->has_app_id_regex) {
-//     if(app_id == NULL) {
-//       matches_app_id = false;
-//     } else {
-//       matches_app_id = regexec(&condition->app_id_regex, app_id, 0, NULL, 0) == 0;
-//     }
-//   } else {
-//     matches_app_id = true;
-//   }
-//
-//   bool matches_title;
-//   if(condition->has_title_regex) {
-//     if(title == NULL) {
-//       matches_title = false;
-//     } else {
-//       matches_title = regexec(&condition->title_regex, title, 0, NULL, 0) == 0;
-//     }
-//   } else {
-//     matches_title = true;
-//   }
-//
-//   return matches_app_id && matches_title;
-// }
-//
-// void
-// toplevel_floating_size(struct mwc_toplevel *toplevel, uint32_t *width, uint32_t *height) {
-//   struct window_rule_size *w;
-//   wl_list_for_each(w, &server.config->window_rules.size, link) {
-//     if(toplevel_matches_window_rule(toplevel, &w->condition)) {
-//       if(w->relative_width) {
-//         *width = toplevel->workspace->output->usable_area.width * w->width / 100;
-//       } else {
-//         *width = w->width;
-//       }
-//
-//       if(w->relative_height) {
-//         *height = toplevel->workspace->output->usable_area.height * w->height / 100;
-//       } else {
-//         *height = w->height;
-//       }
-//
-//       return;
-//     }
-//   }
-//
-//   *width = 0;
-//   *height = 0;
-// }
-//
 // void
 // cursor_jump_focused_toplevel(void) {
 //   struct mwc_toplevel *toplevel = server.focused_toplevel;
@@ -756,250 +767,6 @@ toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_bo
 //
 //   pointer_handle_focus(now.tv_sec * 1000 + now.tv_nsec / 1000, false);
 // }
-//
-// void
-// toplevel_set_pending_state(struct mwc_toplevel *toplevel, uint32_t x, uint32_t y,
-//                            uint32_t width, uint32_t height) {
-//   struct wlr_box pending = {
-//     .x = x,
-//     .y = y,
-//     .width = width,
-//     .height = height,
-//   };
-//
-//   toplevel->pending = pending;
-//
-//   if(!server.config->animations || toplevel == server.grabbed_toplevel
-//      || wlr_box_equal(&toplevel->current, &pending)) {
-//     toplevel->animation.should_animate = false;
-//   } else {
-//     toplevel->animation.should_animate = true;
-//     toplevel->animation.initial = toplevel->current;
-//   }
-//
-//   if(toplevel->current.width == toplevel->pending.width
-//      && toplevel->current.height == toplevel->pending.height) {
-//     toplevel_commit(toplevel);
-//     return;
-//   };
-//
-//   toplevel->configure_serial = wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel,
-//                                                          width, height);
-//   toplevel->dirty = true;
-// }
-//
-// void
-// toplevel_move(void) {
-//   /* move the grabbed toplevel to the new position */
-//   struct mwc_toplevel *toplevel = server.grabbed_toplevel;
-//
-//   int32_t new_x = server.grabbed_toplevel_initial_box.x + (server.cursor->x - server.grab_x);
-//   int32_t new_y = server.grabbed_toplevel_initial_box.y + (server.cursor->y - server.grab_y);
-//
-//   toplevel_set_pending_state(toplevel, new_x, new_y,
-//                              toplevel->current.width, toplevel->current.height);
-// }
-//
-// void
-// toplevel_resize(void) {
-//   struct mwc_toplevel *toplevel = server.grabbed_toplevel;
-//
-//   toplevel->resizing = true;
-//
-//   int start_x = server.grabbed_toplevel_initial_box.x;
-//   int start_y = server.grabbed_toplevel_initial_box.y;
-//   int start_width = server.grabbed_toplevel_initial_box.width;
-//   int start_height = server.grabbed_toplevel_initial_box.height;
-//
-//   int new_x = server.grabbed_toplevel_initial_box.x;
-//   int new_y = server.grabbed_toplevel_initial_box.y;
-//   int new_width = server.grabbed_toplevel_initial_box.width;
-//   int new_height = server.grabbed_toplevel_initial_box.height;
-//
-//   int min_width = max(toplevel->xdg_toplevel->current.min_width,
-//                       server.config->min_toplevel_size);
-//   int min_height = max(toplevel->xdg_toplevel->current.min_height,
-//                        server.config->min_toplevel_size);
-//
-//   if(server.resize_edges & WLR_EDGE_TOP) {
-//     new_y = start_y + (server.cursor->y - server.grab_y);
-//     new_height = start_height - (server.cursor->y - server.grab_y);
-//     if(new_height <= min_height) {
-//       new_y = start_y + start_height - min_height;
-//       new_height = min_height;
-//     }
-//   } else if(server.resize_edges & WLR_EDGE_BOTTOM) {
-//     new_y = start_y;
-//     new_height = start_height + (server.cursor->y - server.grab_y);
-//     if(new_height <= min_height) {
-//       new_height = min_height;
-//     }
-//   }
-//   if(server.resize_edges & WLR_EDGE_LEFT) {
-//     new_x = start_x + (server.cursor->x - server.grab_x);
-//     new_width = start_width - (server.cursor->x - server.grab_x);
-//     if(new_width <= min_width) {
-//       new_x = start_x + start_width - min_width;
-//       new_width = min_width;
-//     }
-//   } else if(server.resize_edges & WLR_EDGE_RIGHT) {
-//     new_x = start_x;
-//     new_width = start_width + (server.cursor->x - server.grab_x);
-//     if(new_width <= min_width) {
-//       new_width = min_width;
-//     }
-//   }
-//
-//   toplevel_set_pending_state(toplevel, new_x, new_y, new_width, new_height);
-// }
-//
-// void
-// unfocus_focused_toplevel(void) {
-//   struct mwc_toplevel *toplevel = server.focused_toplevel;
-//   if(toplevel == NULL) return;
-//
-//   server.focused_toplevel = NULL;
-//   /* deactivate the surface */
-//   wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, false);
-//   /* clear all focus on the keyboard, focusing new should set new toplevel focus */
-//   wlr_seat_keyboard_clear_focus(server.seat);
-//   wlr_seat_pointer_clear_focus(server.seat);
-//
-//   ipc_broadcast_message(IPC_ACTIVE_TOPLEVEL);
-//   wlr_foreign_toplevel_handle_v1_set_activated(toplevel->foreign_toplevel_handle, false);
-//
-//   /* we schedule a frame in order for borders to be redrawn */
-//   wlr_output_schedule_frame(toplevel->workspace->output->wlr_output);
-// }
-//
-// void
-// focus_toplevel(struct mwc_toplevel *toplevel) {
-//   /* there has been an issue with some electron apps that do not
-//    * want to map the surface, and neither want to destroy themselfs */
-//   if(server.lock != NULL) return;
-//   if(server.exclusive) return;
-//   if(server.grabbed_toplevel != NULL) return;
-//   if(toplevel->workspace->fullscreen_toplevel != NULL
-//      && toplevel != toplevel->workspace->fullscreen_toplevel) return;
-//
-//   struct mwc_toplevel *prev_toplevel = server.focused_toplevel;
-//   if(prev_toplevel == toplevel) return;
-//
-//   if(prev_toplevel != NULL) {
-//     wlr_xdg_toplevel_set_activated(prev_toplevel->xdg_toplevel, false);
-//     wlr_foreign_toplevel_handle_v1_set_activated(toplevel->foreign_toplevel_handle, false);
-//   }
-//
-//   server.focused_toplevel = toplevel;
-//
-//   if(toplevel->floating) {
-//     wl_list_remove(&toplevel->link);
-//     wl_list_insert(&toplevel->workspace->floating_toplevels, &toplevel->link);
-//   }
-//
-// 	wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, true);
-//   wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
-//
-//   struct wlr_seat *seat = server.seat;
-//   struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
-//   if(keyboard != NULL) {
-//     wlr_seat_keyboard_notify_enter(seat, toplevel->xdg_toplevel->base->surface,
-//                                    keyboard->keycodes, keyboard->num_keycodes,
-//                                    &keyboard->modifiers);
-//   }
-//
-//   ipc_broadcast_message(IPC_ACTIVE_TOPLEVEL);
-//   wlr_foreign_toplevel_handle_v1_set_activated(toplevel->foreign_toplevel_handle, true);
-//
-//   /* we schedule a frame in order for borders to be redrawn */
-//   wlr_output_schedule_frame(toplevel->workspace->output->wlr_output);
-// }
-//
-//
-// struct mwc_toplevel *
-// toplevel_find_closest_floating_on_workspace(struct mwc_toplevel *toplevel,
-//                                             enum mwc_direction direction) {
-//   assert(toplevel->floating);
-//   struct mwc_workspace *workspace = toplevel->workspace;
-//
-//   struct mwc_toplevel *min = NULL;
-//   uint32_t min_val = UINT32_MAX;
-//
-//   struct mwc_toplevel *t;
-//   switch(direction) {
-//     case MWC_UP: {
-//       wl_list_for_each(t, &workspace->floating_toplevels, link) {
-//         if(t == toplevel || Y(t) > Y(toplevel)) continue;
-//
-//         uint32_t dy = abs((int)Y(toplevel) - Y(t));
-//         if(dy < min_val) {
-//           min = t;
-//           min_val = dy;
-//         }
-//       }
-//       return min;
-//     }
-//     case MWC_DOWN: {
-//       wl_list_for_each(t, &workspace->floating_toplevels, link) {
-//         if(t == toplevel || Y(t) < Y(toplevel)) continue;
-//
-//         uint32_t dy = abs((int)Y(toplevel) - Y(t));
-//         if(dy < min_val) {
-//           min = t;
-//           min_val = dy;
-//         }
-//       }
-//       return min;
-//     }
-//     case MWC_LEFT: {
-//       wl_list_for_each(t, &workspace->floating_toplevels, link) {
-//         if(t == toplevel || X(t) > X(toplevel)) continue;
-//
-//         uint32_t dx = abs((int)X(toplevel) - X(t));
-//         if(dx < min_val) {
-//           min = t;
-//           min_val = dx;
-//         }
-//       }
-//       return min;
-//     }
-//     case MWC_RIGHT: {
-//       wl_list_for_each(t, &workspace->floating_toplevels, link) {
-//         if(t == toplevel || X(t) < X(toplevel)) continue;
-//
-//         uint32_t dx = abs((int)X(toplevel) - X(t));
-//         if(dx < min_val) {
-//           min = t;
-//           min_val = dx;
-//         }
-//       }
-//       return min;
-//     }
-//   }
-// }
-//
-// struct mwc_output *
-// toplevel_get_primary_output(struct mwc_toplevel *toplevel) {
-//   struct wlr_box intersection_box;
-//   struct wlr_box output_box;
-//   uint32_t max_area = 0;
-//   struct mwc_output *max_area_output = NULL;
-//
-//   struct mwc_output *o;
-//   wl_list_for_each(o, &server.outputs, link) {
-//     wlr_output_layout_get_box(server.output_layout, o->wlr_output, &output_box);
-//     bool intersects =
-//       wlr_box_intersection(&intersection_box, &toplevel->current, &output_box);
-//     if(intersects && box_area(&intersection_box) > max_area) {
-//       max_area = box_area(&intersection_box);
-//       max_area_output = o;
-//     }
-//   }
-//
-//   return max_area_output;
-// }
-//
-//
 // void
 // toplevel_tiled_insert_into_layout(struct mwc_toplevel *toplevel, uint32_t x, uint32_t y) {
 //   struct mwc_workspace *workspace = server.active_workspace;

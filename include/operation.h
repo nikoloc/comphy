@@ -14,13 +14,13 @@ enum operation {
 struct state;
 
 void
-operation_start_move(struct state *state, struct toplevel *toplevel);
+operation_start_move(struct state *state, struct toplevel *toplevel, bool server_inited);
 
 void
 operation_stop_move(struct state *state);
 
 void
-operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges);
+operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges, bool server_inited);
 
 void
 operation_stop_resize(struct state *state);

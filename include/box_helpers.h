@@ -31,4 +31,12 @@ wlr_box_remove_gaps(struct wlr_box *box, int gaps) {
     box->height -= 2 * gaps;
 }
 
+static inline void
+wlr_box_add_gaps(struct wlr_box *box, int gaps) {
+    box->x -= gaps;
+    box->y -= gaps;
+    box->width += 2 * gaps;
+    box->height += 2 * gaps;
+}
+
 #endif

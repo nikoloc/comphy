@@ -10,7 +10,7 @@
 #include "view.h"
 
 enum toplevel_state {
-    TOPLEVEL_STATE_TILED,
+    TOPLEVEL_STATE_TILED = 0,
     TOPLEVEL_STATE_FLOAT,
     TOPLEVEL_STATE_FULLSCREEN,
 };
@@ -30,16 +30,21 @@ struct toplevel {
     u32 configure_serial;
     bool is_dirty;
 
-    // TODO: figure out what to do with this
-    double inactive_opacity;
-    double active_opacity;
-
     struct wlr_box current, pending;
+    // parametars of the last `toplevel_configure()` call that were request of this toplevel. we need those because even
+    // tho the full box may not change between subsequent calls, the decoroations may, hence we compute wheather the
+    // size has changed based on this parametar
+    int requested_width, requested_height;
     bool needs_centering, needs_initial_enable;
+    // in order for everything scene-related to be atomic, we need to keep a lot of retained logic and only apply it on
+    // transaction commit. this makes for a lot of bool flags bellow
+    bool has_border;
+    // should only be updated by `toplevel_update_state()`
+    bool needs_reparenting;
 
     // for the toplevel we create a scene tree, which contains the whole toplevel presentation on the screen: the
     // decorations and the content. when the toplevel is dirty we create the last snapshot of the content tree and
-    // keep it in the snapshot_tree until the client commits the new content coresponding to the desired geometry
+    // keep it in the `snapshot_tree` until the client commits the new content coresponding to the desired geometry
     struct wlr_scene_tree *scene_tree;
     struct wlr_scene_tree *content_tree;
     struct wlr_scene_rect *border;
@@ -88,5 +93,11 @@ toplevel_get_corner_closest_to(struct toplevel *toplevel, int x, int y);
 
 void
 toplevel_set_border_color(struct toplevel *toplevel, color_t color);
+
+// this function does not consider the layout, lists, positioning etc and is meant to be called once all of
+// that has been done by wahtever logic was needed in that scenario. this function does some final adjustements
+// for the transaction system and sends the 'hacks' to the toplevel based on state
+void
+toplevel_update_state(struct toplevel *toplevel, enum toplevel_state state);
 
 #endif

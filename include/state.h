@@ -45,6 +45,7 @@ struct state {
     struct wl_list keybinds;
 
     enum operation operation;
+    bool operation_server_inited;
     struct toplevel *grabbed_toplevel;
     double grab_x, grab_y;
     struct wlr_box grabbed_toplevel_initial_box;

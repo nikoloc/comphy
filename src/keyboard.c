@@ -62,6 +62,7 @@ handle_modifiers(struct wl_listener *listener, void *data) {
 
 static bool
 handle_change_vt(struct state *state, int count, const xkb_keysym_t *keysyms) {
+    // from `labwc`, thanks!
     for(int i = 0; i < count; i++) {
         int vt = keysyms[i] - XKB_KEY_XF86Switch_VT_1 + 1;
         if(vt >= 1 && vt <= 12) {
@@ -85,9 +86,8 @@ handle_keybinds(struct state *state, struct keyboard *keyboard, u32 keycode, int
     for(int i = 0; i < count; i++) {
         struct keybind *iter;
         wl_list_for_each(iter, &state->keybinds, link) {
-            // TODO: how to handle long actions?
             if(syms[i] == iter->key && ((mods & ~consumed_mods & significant_mods) == iter->modifiers) &&
-                    key_state == WL_KEYBOARD_KEY_STATE_RELEASED) {
+                    key_state == WL_KEYBOARD_KEY_STATE_PRESSED) {
                 wlr_log(WLR_ERROR, "action: %d", iter->type);
                 action_perform(state, iter->type, iter->action);
                 return true;
@@ -104,21 +104,20 @@ handle_key(struct wl_listener *listener, void *data) {
     struct wlr_keyboard_key_event *event = data;
     struct state *state = state_get();
 
+    if(state->operation && state->operation_server_inited) {
+        operation_stop_whatever(state);
+    }
+
     // translate libinput keycode -> xkbcommon
     u32 keycode = event->keycode + 8;
 
     const xkb_keysym_t *syms;
     int count = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
-    for(int i = 0; i < count; i++) {
-        wlr_log(WLR_ERROR, "sym: %u", syms[i]);
-    }
 
     bool handled = handle_change_vt(state, count, syms);
-
     if(!handled) {
         handled = handle_keybinds(state, keyboard, keycode, count, syms, event->state);
     }
-
     if(!handled) {
         // pass to client
         wlr_seat_set_keyboard(state->seat.wlr_seat, keyboard->wlr_keyboard);

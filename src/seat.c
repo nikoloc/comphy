@@ -13,6 +13,10 @@ handle_request_cursor(struct wl_listener *listener, void *data) {
     struct wlr_seat_pointer_request_set_cursor_event *event = data;
     struct state *state = state_get();
 
+    if(state->operation && state->operation_server_inited) {
+        return;
+    }
+
     // we do it based on pointer focus
     struct wlr_seat_client *focused_client = state->seat.wlr_seat->pointer_state.focused_client;
     if(focused_client == event->seat_client) {

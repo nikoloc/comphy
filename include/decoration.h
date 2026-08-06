@@ -3,6 +3,7 @@
 
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_server_decoration.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
 
 struct decoration {
     struct wlr_xdg_decoration_manager_v1 *xdg_decoration_manager;
@@ -16,5 +17,8 @@ decoration_init(struct decoration *decoration, struct wl_display *display);
 
 void
 decoration_deinit(struct decoration *decoration);
+
+void
+decoration_update(struct decoration *decoration, bool csd);
 
 #endif

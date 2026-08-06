@@ -71,7 +71,14 @@ scene_tree_snapshot(struct wlr_scene_tree *tree) {
 }
 
 static bool
-all_ready(struct workspace *workspace) {
+all_ready(struct state *state, struct workspace *workspace) {
+    struct wlr_box dummy;
+    if(state->operation == OPERATION_MOVE && state->grabbed_toplevel &&
+            // wlr_box_intersection(&dummy, &state->grabbed_toplevel->pending, &workspace->output->full_area) &&
+            state->grabbed_toplevel->is_dirty) {
+        return false;
+    }
+
     if(workspace->master && workspace->master->is_dirty) {
         wlr_log(WLR_DEBUG, "workspace '%d' master dirty", workspace->idx);
         return false;
@@ -96,17 +103,85 @@ all_ready(struct workspace *workspace) {
 }
 
 static void
+reparent(struct state *state, struct toplevel *toplevel) {
+    if(toplevel == state->grabbed_toplevel) {
+        wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.grab);
+    } else {
+        switch(toplevel->state) {
+            case TOPLEVEL_STATE_TILED: {
+                wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.tiled);
+                break;
+            }
+            case TOPLEVEL_STATE_FLOAT: {
+                wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.floats);
+                break;
+            }
+            case TOPLEVEL_STATE_FULLSCREEN: {
+                wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.fullscreen);
+                break;
+            }
+        }
+    }
+
+    toplevel->needs_reparenting = false;
+}
+
+static void
+clip(struct state *state, struct toplevel *toplevel) {
+    struct wlr_box *geometry = &toplevel->wlr_toplevel->base->geometry;
+    int width = toplevel->current.width;
+    int height = toplevel->current.height;
+    if(toplevel->has_border) {
+        width -= 2 * state->config.border.width;
+        height -= 2 * state->config.border.width;
+    }
+
+    // NOTE: we start from geometry.x and geometry.y in order to skip the shadow, effects etc
+    struct wlr_box clip = (struct wlr_box){
+            .x = geometry->x,
+            .y = geometry->y,
+            .width = width,
+            .height = height,
+    };
+
+    wlr_scene_subsurface_tree_set_clip(&toplevel->content_tree->node, &clip);
+
+    // remove the clip from popups
+    struct wlr_scene_node *iter;
+    wl_list_for_each(iter, &toplevel->scene_tree->children, link) {
+        enum view *view = iter->data;
+        if(view && *view == VIEW_POPUP) {
+            wlr_scene_subsurface_tree_set_clip(iter, NULL);
+        }
+    }
+}
+
+static void
 commit(struct state *state, struct toplevel *toplevel) {
     toplevel->current = toplevel->pending;
 
+    // update the presentation
     if(toplevel->needs_initial_enable) {
         wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
         toplevel->needs_initial_enable = false;
     }
 
+    clip(state, toplevel);
+
+    if(toplevel->needs_reparenting) {
+        reparent(state, toplevel);
+    }
+
     wlr_scene_node_set_position(&toplevel->scene_tree->node, toplevel->current.x, toplevel->current.y);
-    wlr_scene_rect_set_size(toplevel->border, toplevel->current.width + 2 * state->config.border.width,
-            toplevel->current.height + 2 * state->config.border.width);
+    if(toplevel->has_border) {
+        wlr_scene_node_set_position(&toplevel->content_tree->node, state->config.border.width,
+                state->config.border.width);
+    } else {
+        wlr_scene_node_set_position(&toplevel->content_tree->node, 0, 0);
+    }
+
+    wlr_scene_rect_set_size(toplevel->border, toplevel->current.width, toplevel->current.height);
+    wlr_scene_node_set_enabled(&toplevel->border->node, toplevel->has_border);
 
     if(toplevel->snapshot_tree) {
         wlr_scene_node_destroy(&toplevel->snapshot_tree->node);
@@ -117,10 +192,19 @@ commit(struct state *state, struct toplevel *toplevel) {
 }
 
 static void
-commit_all(struct state *state, struct workspace *workspace, bool unmark) {
+commit_all(struct state *state, struct workspace *workspace, bool time_out) {
+    struct wlr_box dummy;
+    if(state->operation == OPERATION_MOVE && state->grabbed_toplevel &&
+            wlr_box_intersection(&dummy, &state->grabbed_toplevel->pending, &workspace->output->full_area)) {
+        commit(state, state->grabbed_toplevel);
+        if(time_out) {
+            state->grabbed_toplevel->is_dirty = false;
+        }
+    }
+
     if(workspace->master) {
         commit(state, workspace->master);
-        if(unmark) {
+        if(time_out) {
             workspace->master->is_dirty = false;
         }
     }
@@ -128,14 +212,14 @@ commit_all(struct state *state, struct workspace *workspace, bool unmark) {
     struct toplevel *iter;
     wl_list_for_each(iter, &workspace->floats, link) {
         commit(state, iter);
-        if(unmark) {
+        if(time_out) {
             iter->is_dirty = false;
         }
     }
 
     wl_list_for_each(iter, &workspace->slaves, link) {
         commit(state, iter);
-        if(unmark) {
+        if(time_out) {
             iter->is_dirty = false;
         }
     }
@@ -146,8 +230,6 @@ transaction_commit(struct state *state, struct toplevel *toplevel) {
     wlr_log(WLR_DEBUG, "toplevel '%p' transaction commit", (void *)toplevel);
 
     toplevel->is_dirty = false;
-
-    // TODO: handle grabbed
 
     struct workspace *workspace = toplevel->workspace;
     if(toplevel->state == TOPLEVEL_STATE_FULLSCREEN) {
@@ -160,7 +242,7 @@ transaction_commit(struct state *state, struct toplevel *toplevel) {
         return;
     }
 
-    if(!all_ready(workspace)) {
+    if(!all_ready(state, workspace)) {
         wlr_log(WLR_DEBUG, "transaction not ready yet");
         // transaction not ready
         return;
@@ -214,6 +296,10 @@ transaction_time_out(void *data) {
 
 void
 transaction_mark_dirty(struct state *state, struct toplevel *toplevel) {
+    if(toplevel->is_dirty) {
+        return;
+    }
+
     toplevel->is_dirty = true;
 
     // create the snapshot tree to replace it until the new buffer is ready

@@ -27,9 +27,9 @@ toggle_float(struct state *state) {
             struct workspace *workspace = toplevel->workspace;
             layout_remove(toplevel);
             wl_list_insert(&workspace->floats, &toplevel->link);
-            toplevel->state = TOPLEVEL_STATE_FLOAT;
 
-            // TODO: unset hacks
+            toplevel_update_state(toplevel, TOPLEVEL_STATE_FLOAT);
+
             layout_configure(state, workspace);
             toplevel_configure(state, toplevel, &(struct wlr_box){0});
             toplevel->needs_centering = true;
@@ -39,8 +39,8 @@ toggle_float(struct state *state) {
             struct workspace *workspace = toplevel->workspace;
             wl_list_remove(&toplevel->link);
             layout_add(workspace, toplevel);
-            toplevel->state = TOPLEVEL_STATE_TILED;
-            // TODO: set hacks
+
+            toplevel_update_state(toplevel, TOPLEVEL_STATE_TILED);
 
             layout_configure(state, workspace);
             break;
@@ -52,31 +52,34 @@ toggle_float(struct state *state) {
     }
 }
 
-static inline color_t
-get_color(struct state *state, struct toplevel *toplevel) {
-    return toplevel == state->focused_toplevel ? state->config.border.color.active : state->config.border.color.active;
+static inline void
+update_border_color(struct state *state, struct toplevel *toplevel) {
+    color_t color =
+            toplevel == state->focused_toplevel ? state->config.border.color.active : state->config.border.color.active;
+    toplevel_set_border_color(toplevel, color);
 }
 
 static void
 update_all_borders(struct state *state) {
+    if(state->grabbed_toplevel) {
+        update_border_color(state, state->grabbed_toplevel);
+    }
+
     struct output *output;
     wl_list_for_each(output, &state->outputs, link) {
         struct workspace *workspace;
         wl_list_for_each(workspace, &output->workspaces, link) {
             if(workspace->master) {
-                color_t color = get_color(state, workspace->master);
-                toplevel_set_border_color(workspace->master, color);
+                update_border_color(state, workspace->master);
             }
 
             struct toplevel *toplevel;
             wl_list_for_each(toplevel, &workspace->floats, link) {
-                color_t color = get_color(state, toplevel);
-                toplevel_set_border_color(toplevel, color);
+                update_border_color(state, toplevel);
             }
 
             wl_list_for_each(toplevel, &workspace->slaves, link) {
-                color_t color = get_color(state, toplevel);
-                toplevel_set_border_color(toplevel, color);
+                update_border_color(state, toplevel);
             }
         }
     }
@@ -352,7 +355,7 @@ action_perform(struct state *state, enum action_type type, void *_action) {
                 break;
             }
 
-            operation_start_move(state, toplevel);
+            operation_start_move(state, toplevel, true);
             break;
         }
         case ACTION_TYPE_START_RESIZE: {
@@ -369,7 +372,7 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             u32 edges =
                     toplevel_get_corner_closest_to(toplevel, state->cursor.wlr_cursor->x, state->cursor.wlr_cursor->y);
 
-            operation_start_resize(state, toplevel, edges);
+            operation_start_resize(state, toplevel, edges, true);
             break;
         }
         case ACTION_TYPE_REPEAT_RATE: {
@@ -500,6 +503,14 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             }
 
             layout_reconfigure_all(state);
+            break;
+        }
+        case ACTION_TYPE_CLIENT_SIDE_DECORATIONS: {
+            struct action_csd *action = _action;
+            wlr_log(WLR_ERROR, "here");
+            state->config.csd = action->enable;
+
+            decoration_update(&state->decoration, action->enable);
             break;
         }
         case ACTION_TYPE_TOPLEVEL_RULE: {

@@ -1,7 +1,9 @@
 #include "operation.h"
 
 #include <wlr/util/log.h>
+#include <wlr/xcursor.h>
 
+#include "box_helpers.h"
 #include "layout.h"
 #include "list_helpers.h"
 #include "state.h"
@@ -9,36 +11,8 @@
 #include "util/time_util.h"
 #include "workspace.h"
 
-// TODO: if server side then handle the cursor, reference:
-// void
-// keybind_resize_focused_toplevel(void *data) {
-//     struct mwc_toplevel *toplevel = get_pointer_focused_toplevel();
-//     if(toplevel == NULL || !toplevel->floating)
-//         return;
-//
-//     uint32_t edges = toplevel_get_closest_corner(server.cursor, toplevel);
-//
-//     char cursor_image[128] = {0};
-//     if(edges & WLR_EDGE_TOP) {
-//         strcat(cursor_image, "top_");
-//     } else {
-//         strcat(cursor_image, "bottom_");
-//     }
-//     if(edges & WLR_EDGE_LEFT) {
-//         strcat(cursor_image, "left_");
-//     } else {
-//         strcat(cursor_image, "right_");
-//     }
-//     strcat(cursor_image, "corner");
-//
-//     wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, cursor_image);
-//
-//     server.client_driven_move_resize = false;
-//     toplevel_start_resize(toplevel, edges);
-// }
-
 void
-operation_start_move(struct state *state, struct toplevel *toplevel) {
+operation_start_move(struct state *state, struct toplevel *toplevel, bool server_inited) {
     if(state->operation) {
         // if there is some operation already skip it
         return;
@@ -50,7 +24,6 @@ operation_start_move(struct state *state, struct toplevel *toplevel) {
     state->grab_x = state->cursor.wlr_cursor->x;
     state->grab_y = state->cursor.wlr_cursor->y;
 
-    // TODO: should we handle the transaction here
     state->grabbed_toplevel_initial_box = toplevel->current;
 
     // remove the toplevel and fix the layout
@@ -75,7 +48,13 @@ operation_start_move(struct state *state, struct toplevel *toplevel) {
     }
 
     // move this toplevel to the grab tree
-    wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.grab);
+    toplevel->needs_reparenting = true;
+
+    state->operation_server_inited = server_inited;
+    if(server_inited) {
+        // set the cursor image
+        cursor_set_image(state, "grab");
+    }
 }
 
 static void
@@ -94,21 +73,58 @@ insert_layout_at_cursor(struct state *state, struct toplevel *toplevel) {
         }
 
         output = CONTAINER_OF(first, struct output, link);
-        // TODO: insert it last in this case
+    }
+
+    struct workspace *workspace = output->active_workspace;
+
+    if(!workspace->master) {
+        workspace->master = toplevel;
+        layout_configure(state, workspace);
         return;
     }
 
-    // relative coords on this output
-    int dx = output->full_area.x - x;
-    int dy = output->full_area.y - y;
+    // doing all the calcalations for the layout just seems bothersome; instead loop throught all see where you are
+    struct wlr_box box = workspace->master->current;
+    wlr_box_add_gaps(&box, state->config.gaps.inner);
 
-    // if over the master insert it as master, else insert it as slave. for the inserting take the approach of inserting
-    // before the slave if the cursor is over the top part of the toplevel and vice versa.
-    if(dx < output->full_area.width * state->config.master_ratio) {
-        // TODO: finish this when the layout is done
-    } else {
-        // TODO: finish this when the layout is done
+    if(wlr_box_contains_point(&box, x, y)) {
+        // we are on top of master, check left or right
+        if(x < box.x + box.width / 2) {
+            // left, insert as mastter
+            wl_list_insert(&workspace->slaves, &workspace->master->link);
+            workspace->master = toplevel;
+        } else {
+            // as slave
+            wl_list_insert(&workspace->slaves, &toplevel->link);
+        }
+
+        layout_configure(state, workspace);
+        return;
     }
+
+    // go through slaves and check
+    struct toplevel *iter;
+    wl_list_for_each(iter, &workspace->slaves, link) {
+        box = iter->current;
+        wlr_box_add_gaps(&box, state->config.gaps.inner);
+
+        if(wlr_box_contains_point(&box, x, y)) {
+            if(y < box.y + box.height / 2) {
+                // above, insert before this one
+                wl_list_insert(iter->link.prev, &toplevel->link);
+            } else {
+                // after
+                wl_list_insert(&iter->link, &toplevel->link);
+            }
+
+            layout_configure(state, workspace);
+            return;
+        }
+    }
+
+    // if nothing (e.g. over a panel or outer gaps) insert regular
+    layout_add(workspace, toplevel);
+    layout_configure(state, workspace);
 }
 
 static void
@@ -146,21 +162,17 @@ operation_stop_move(struct state *state) {
 
         wl_list_insert(&output->active_workspace->floats, &toplevel->link);
         toplevel->workspace = output->active_workspace;
-
-        // return it to the float tree
-        wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.floats);
     } else {
         insert_layout_at_cursor(state, toplevel);
-
-        // return it to the tiled tree
-        wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.tiled);
     }
 
+    // return it to the right tree
+    toplevel->needs_reparenting = true;
     stop_shared(state);
 }
 
 void
-operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges) {
+operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges, bool server_inited) {
     if(state->grabbed_toplevel || toplevel->state != TOPLEVEL_STATE_FLOAT) {
         return;
     }
@@ -171,6 +183,12 @@ operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges
     state->grab_y = state->cursor.wlr_cursor->y;
     state->grabbed_toplevel_initial_box = toplevel->current;
     state->resize_edges = edges;
+
+    state->operation_server_inited = server_inited;
+    if(server_inited) {
+        // set the cursor image
+        cursor_set_image(state, (char *)wlr_xcursor_get_resize_name(edges));
+    }
 }
 
 void
@@ -184,6 +202,7 @@ operation_stop_resize(struct state *state) {
         wl_list_insert(&largest_output->active_workspace->floats, &toplevel->link);
     }
 
+    toplevel->needs_reparenting = true;
     stop_shared(state);
 }
 
@@ -291,13 +310,15 @@ operation_tick(struct state *state) {
         }
         case OPERATION_MOVE: {
             move(state);
+            break;
         }
         case OPERATION_RESIZE: {
             resize(state);
+            break;
         }
         case OPERATION_DRAG: {
-            // TODO: implement
             // drag(state);
-        } break;
+            break;
+        }
     }
 }

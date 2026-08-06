@@ -42,15 +42,13 @@ struct config {
     } border;
 
     struct {
-        float active, inactive;
-    } opacity;
-
-    struct {
         int outer, inner;
         bool smart;
     } gaps;
 
     float master_ratio;
+
+    bool csd;
 };
 
 void

@@ -39,6 +39,7 @@ enum action_type {
     ACTION_TYPE_BORDER_WIDTH,
     ACTION_TYPE_BORDER_COLOR,
     ACTION_TYPE_MASTER_RATIO,
+    ACTION_TYPE_CLIENT_SIDE_DECORATIONS,
 
     ACTION_TYPE_TOPLEVEL_RULE,
     ACTION_TYPE_POINTER_RULE,
@@ -141,8 +142,13 @@ struct action_border_color {
 };
 
 struct action_master_ratio {
+    // TODO: add per workspace
     bool adjust;
     float value;
+};
+
+struct action_csd {
+    bool enable;
 };
 
 #endif

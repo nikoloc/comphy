@@ -35,9 +35,6 @@ config_init(struct config *config) {
     wl_list_init(&config->pointer_rules);
     wl_list_init(&config->toplevel_rules);
 
-    config->opacity.active = 1;
-    config->opacity.inactive = 1;
-
     config->master_ratio = 0.5f;
 }
 
