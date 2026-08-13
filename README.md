@@ -1,6 +1,7 @@
-note: for keybinds do cleanmask beforehand
+# TODO
 
-#define CLEANMASK(mask) (mask & ~WLR_MODIFIER_CAPS)
+- add raise_to_top()
+- check for move_to_workspace
 
 <div align="center">
   <h1>mwc</h1>

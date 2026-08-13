@@ -77,6 +77,7 @@ ctx.add_source(
         "src/output.c",
         "src/pointer.c",
         "src/popup.c",
+        "src/rules.c",
         "src/scene.c",
         "src/seat.c",
         "src/state.c",

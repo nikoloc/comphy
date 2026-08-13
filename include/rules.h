@@ -60,6 +60,6 @@ void
 toplevel_rule_destroy(struct toplevel_rule *rule);
 
 void
-pointer_rule_destroy(struct toplevel_rule *rule);
+pointer_rule_destroy(struct pointer_rule *rule);
 
 #endif

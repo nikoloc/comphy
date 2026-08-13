@@ -27,11 +27,12 @@
 static bool
 matches_rule(struct toplevel *toplevel, struct toplevel_rule *rule) {
     if((rule->fields & TOPLEVEL_RULE_FIELD_MATCH_APP_ID) &&
-            !strstr(toplevel->wlr_toplevel->app_id, rule->match.app_id)) {
+            (!toplevel->wlr_toplevel->app_id || !strstr(toplevel->wlr_toplevel->app_id, rule->match.app_id))) {
         return false;
     }
 
-    if((rule->fields & TOPLEVEL_RULE_FIELD_MATCH_TITLE) && !strstr(toplevel->wlr_toplevel->title, rule->match.title)) {
+    if((rule->fields & TOPLEVEL_RULE_FIELD_MATCH_TITLE) &&
+            (!toplevel->wlr_toplevel->title || !strstr(toplevel->wlr_toplevel->title, rule->match.title))) {
         return false;
     }
 
@@ -150,6 +151,7 @@ handle_map(struct wl_listener *listener, void *data) {
             break;
         }
         case TOPLEVEL_STATE_FLOAT: {
+            wl_list_insert(&workspace->floats, &toplevel->link);
             // reparent the tree to floating global
             wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.floats);
 

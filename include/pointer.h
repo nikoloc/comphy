@@ -7,8 +7,6 @@
 #include <wlr/types/wlr_pointer_constraints_v1.h>
 #include <wlr/types/wlr_relative_pointer_v1.h>
 
-#include "action.h"
-
 struct pointer {
     struct wlr_pointer *wlr_pointer;
     struct wl_listener destroy;
@@ -19,9 +17,6 @@ struct state;
 
 struct pointer *
 pointer_create(struct state *state, struct wlr_pointer *wlr_pointer);
-
-const char *
-pointer_get_name(struct pointer *pointer);
 
 void
 pointer_configure_from_rules(struct state *state, struct pointer *pointer);

@@ -11,6 +11,7 @@
 #include <wlr/util/log.h>
 
 #include "keybind.h"
+#include "rules.h"
 #include "util/memory.h"
 
 //         pointer = true;
@@ -47,9 +48,21 @@ config_deinit(struct config *config) {
         }
     }
 
+    {
+        struct pointer_rule *iter, *temp;
+        wl_list_for_each_safe(iter, temp, &config->pointer_rules, link) {
+            pointer_rule_destroy(iter);
+        }
+    }
+
+    {
+        struct toplevel_rule *iter, *temp;
+        wl_list_for_each_safe(iter, temp, &config->toplevel_rules, link) {
+            toplevel_rule_destroy(iter);
+        }
+    }
+
     FREE(config->keyboard.xkb_layouts);
     FREE(config->keyboard.xkb_variants);
     FREE(config->keyboard.xkb_options);
-
-    // TODO: pointer_rules and toplevel_rules
 }

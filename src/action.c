@@ -8,6 +8,7 @@
 #include "layout.h"
 #include "list_helpers.h"
 #include "pointer.h"
+#include "rules.h"
 #include "seat.h"
 #include "system.h"
 #include "util/macros.h"
@@ -514,9 +515,21 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             break;
         }
         case ACTION_TYPE_TOPLEVEL_RULE: {
+            struct toplevel_rule *rule = _action;
+
+            wl_list_insert(state->config.toplevel_rules.prev, &rule->link);
             break;
         }
         case ACTION_TYPE_POINTER_RULE: {
+            struct pointer_rule *rule = _action;
+
+            // insert last so it overrides others
+            wl_list_insert(state->config.pointer_rules.prev, &rule->link);
+
+            struct pointer *iter;
+            wl_list_for_each(iter, &state->pointers, link) {
+                pointer_configure_from_rules(state, iter);
+            }
             break;
         }
         case ACTION_TYPE_CREATE_KEYBIND: {

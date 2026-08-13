@@ -7,6 +7,7 @@
 
 #include "action.h"
 #include "keybind.h"
+#include "rules.h"
 #include "util/memory.h"
 #include "util/parse.h"
 #define SHELL_PARSER_IMPLEMENTATION
@@ -124,22 +125,37 @@ action_destroy(enum action_type type, void *_action) {
             break;
         }
         case ACTION_TYPE_TOPLEVEL_RULE: {
-            // TODO: implement
+            // in order to not free this action, since it needs to survive, we set the pointer to NULL here. not the
+            // best solution, but is less to type
+            _action = NULL;
             break;
         }
         case ACTION_TYPE_POINTER_RULE: {
-            // TODO: implement
+            // same as above
+            _action = NULL;
             break;
         }
         case ACTION_TYPE_CREATE_KEYBIND: {
-            // in order to not free this action, since it needs to survive, we set the pointer to NULL here. not the
-            // best solution, but is less to type
+            // same as above
             _action = NULL;
             break;
         }
     }
 
     FREE(_action);
+}
+
+static bool
+parse_state(const char *str, enum toplevel_state *state) {
+    if(strcmp(str, "tiled") == 0) {
+        *state = TOPLEVEL_STATE_TILED;
+        return true;
+    }
+    if(strcmp(str, "float") == 0) {
+        *state = TOPLEVEL_STATE_FLOAT;
+        return true;
+    }
+    return false;
 }
 
 static bool
@@ -768,18 +784,177 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         return true;
 
     } else if(strcmp(word, "pointer_rule") == 0) {
-        // TODO: implement pointer_rule
-        return false;
+        *out_type = ACTION_TYPE_POINTER_RULE;
+        struct pointer_rule *rule = ALLOC(struct pointer_rule);
+        *dest = rule;
+
+        while(shell_parser_pop(parser, sizeof(word), word)) {
+            if(strcmp(word, "--name") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    FREE(rule->match.name);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                FREE(rule->match.name);
+                rule->match.name = strdup(word);
+                rule->fields |= POINTER_RULE_FIELD_MATCH_NAME;
+            } else if(strcmp(word, "--sensitivity") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    FREE(rule->match.name);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_float(word, &rule->sensitivity) || rule->sensitivity > 1 || rule->sensitivity < -1) {
+                    FREE(rule->match.name);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                rule->fields |= POINTER_RULE_FIELD_SENSITIVITY;
+            } else if(strcmp(word, "--acceleration") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    FREE(rule->match.name);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_bool(word, &rule->acceleration)) {
+                    FREE(rule->match.name);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                rule->fields |= POINTER_RULE_FIELD_ACCELERATION;
+            } else if(strcmp(word, "--left_handed") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    FREE(rule->match.name);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_bool(word, &rule->left_handed)) {
+                    FREE(rule->match.name);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                rule->fields |= POINTER_RULE_FIELD_LEFT_HANDED;
+            } else {
+                FREE(rule->match.name);
+                FREE(rule);
+                *dest = NULL;
+                return false;
+            }
+        }
+
+        return true;
     } else if(strcmp(word, "toplevel_rule") == 0) {
-        // TODO: implement toplevel_rule
-        return false;
+        *out_type = ACTION_TYPE_TOPLEVEL_RULE;
+        struct toplevel_rule *rule = ALLOC(struct toplevel_rule);
+        *dest = rule;
+
+        while(shell_parser_pop(parser, sizeof(word), word)) {
+            if(strcmp(word, "--app_id") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    FREE(rule->match.app_id);
+                    FREE(rule->match.title);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                FREE(rule->match.app_id);
+                rule->match.app_id = strdup(word);
+                rule->fields |= TOPLEVEL_RULE_FIELD_MATCH_APP_ID;
+            } else if(strcmp(word, "--title") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    FREE(rule->match.app_id);
+                    FREE(rule->match.title);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                FREE(rule->match.title);
+                rule->match.title = strdup(word);
+                rule->fields |= TOPLEVEL_RULE_FIELD_MATCH_TITLE;
+            } else if(strcmp(word, "--state") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    FREE(rule->match.app_id);
+                    FREE(rule->match.title);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_state(word, &rule->state)) {
+                    FREE(rule->match.app_id);
+                    FREE(rule->match.title);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+                rule->fields |= TOPLEVEL_RULE_FIELD_STATE;
+            } else if(strcmp(word, "--width") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    FREE(rule->match.app_id);
+                    FREE(rule->match.title);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_int(word, &rule->width)) {
+                    FREE(rule->match.app_id);
+                    FREE(rule->match.title);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+                rule->fields |= TOPLEVEL_RULE_FIELD_WIDTH;
+            } else if(strcmp(word, "--height") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    FREE(rule->match.app_id);
+                    FREE(rule->match.title);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_int(word, &rule->height)) {
+                    FREE(rule->match.app_id);
+                    FREE(rule->match.title);
+                    FREE(rule);
+                    *dest = NULL;
+                    return false;
+                }
+                rule->fields |= TOPLEVEL_RULE_FIELD_HEIGHT;
+            } else {
+                FREE(rule->match.app_id);
+                FREE(rule->match.title);
+                FREE(rule);
+                *dest = NULL;
+                return false;
+            }
+        }
+
+        return true;
     } else if(strcmp(word, "create_keybind") == 0) {
         *out_type = ACTION_TYPE_CREATE_KEYBIND;
         struct keybind *keybind = ALLOC(struct keybind);
         *dest = keybind;
 
-        // NOTE: unlike for other actions, since the `keybind` object is long-lived, `action_destroy()` does not destrot
-        // it, so we do that here manually with `FREE()`
+        // NOTE: unlike for other actions, since the `keybind` object is long-lived, `action_destroy()` does not
+        // destrot it, so we do that here manually with `FREE()`
         if(!shell_parser_pop(parser, sizeof(word), word)) {
             FREE(keybind);
             *dest = NULL;

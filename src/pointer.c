@@ -11,6 +11,7 @@
 #include <wlr/util/region.h>
 
 #include "config.h"
+#include "rules.h"
 #include "state.h"
 #include "toplevel.h"
 #include "util/macros.h"
@@ -135,8 +136,7 @@ pointer_create(struct state *state, struct wlr_pointer *wlr_pointer) {
     wlr_pointer->data = pointer;
 
     wlr_cursor_attach_input_device(state->cursor.wlr_cursor, &wlr_pointer->base);
-
-    // TODO: lookup rules to configure the pointer
+    pointer_configure_from_rules(state, pointer);
 
     wl_list_insert(&state->pointers, &pointer->link);
 
@@ -146,63 +146,76 @@ pointer_create(struct state *state, struct wlr_pointer *wlr_pointer) {
     return pointer;
 }
 
-const char *
-pointer_get_name(struct pointer *pointer) {
-    if(!wlr_input_device_is_libinput(&pointer->wlr_pointer->base)) {
-        wlr_log(WLR_ERROR, "could not get pointer device name, not libinput");
-        return NULL;
+static bool
+matches_pointer_rule(const char *name, struct pointer_rule *rule) {
+    if((rule->fields & POINTER_RULE_FIELD_MATCH_NAME) && rule->match.name && !strstr(name, rule->match.name)) {
+        return false;
     }
 
-    struct libinput_device *dev = wlr_libinput_get_device_handle(&pointer->wlr_pointer->base);
+    return true;
+}
 
-    libinput_device_ref(dev);
-    const char *name = libinput_device_get_name(dev);
-    libinput_device_unref(dev);
+static void
+create_config(struct state *state, const char *name, struct pointer_rule *config) {
+    struct pointer_rule *iter;
+    wl_list_for_each(iter, &state->config.pointer_rules, link) {
+        if(!matches_pointer_rule(name, iter)) {
+            continue;
+        }
 
-    return name;
+        if(iter->fields & POINTER_RULE_FIELD_SENSITIVITY) {
+            config->sensitivity = iter->sensitivity;
+        }
+
+        if(iter->fields & POINTER_RULE_FIELD_ACCELERATION) {
+            config->acceleration = iter->acceleration;
+        }
+
+        if(iter->fields & POINTER_RULE_FIELD_LEFT_HANDED) {
+            config->left_handed = iter->left_handed;
+        }
+    }
 }
 
 void
 pointer_configure_from_rules(struct state *state, struct pointer *pointer) {
-    // if(!wlr_input_device_is_libinput(&pointer->wlr_pointer->base)) {
-    //     wlr_log(WLR_ERROR, "could not configure pointer device");
-    //     return;
-    // }
-    //
-    // struct libinput_device *dev = wlr_libinput_get_device_handle(&pointer->wlr_pointer->base);
-    // libinput_device_ref(dev);
-    //
-    // const char *name = libinput_device_get_name(dev);
-    //
-    // if(libinput_device_config_accel_is_available(dev)) {
-    //     if(libinput_device_config_accel_set_speed(dev, sensitivity) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
-    //         wlr_log(WLR_ERROR, "applying sensitivity to device '%s' failed", name);
-    //     }
-    //
-    //     if(acceleration) {
-    //         enum libinput_config_accel_profile accel_profile = acceleration == TRI_STATE_ON
-    //                                                                  ? LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE
-    //                                                                  : LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT;
-    //         struct libinput_config_accel *accel_config = libinput_config_accel_create(accel_profile);
-    //
-    //         if(libinput_device_config_accel_apply(dev, accel_config) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
-    //             wlr_log(WLR_ERROR, "applying acceleration profile to device '%s' failed", name);
-    //         }
-    //         libinput_config_accel_destroy(accel_config);
-    //     }
-    //
-    // } else {
-    //     wlr_log(WLR_ERROR, "acceleration and sensitivity options not availabe to device '%s'", name);
-    // }
-    //
-    // if(left_handed && libinput_device_config_left_handed_is_available(dev)) {
-    //     if(libinput_device_config_left_handed_set(dev, left_handed == TRI_STATE_ON) !=
-    //     LIBINPUT_CONFIG_STATUS_SUCCESS) {
-    //         wlr_log(WLR_ERROR, "applying left handed to device '%s' failed", name);
-    //     }
-    // } else {
-    //     wlr_log(WLR_ERROR, "left handed option not availabe to device '%s'", name);
-    // }
-    //
-    // libinput_device_unref(dev);
+    if(!wlr_input_device_is_libinput(&pointer->wlr_pointer->base)) {
+        wlr_log(WLR_ERROR, "could not configure pointer device");
+        return;
+    }
+
+    struct libinput_device *dev = wlr_libinput_get_device_handle(&pointer->wlr_pointer->base);
+    libinput_device_ref(dev);
+
+    const char *name = libinput_device_get_name(dev);
+
+    struct pointer_rule config = {0};
+    create_config(state, name, &config);
+
+    if(libinput_device_config_accel_is_available(dev)) {
+        if(libinput_device_config_accel_set_speed(dev, config.sensitivity) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
+            wlr_log(WLR_ERROR, "applying sensitivity to device '%s' failed", name);
+        }
+
+        enum libinput_config_accel_profile accel_profile =
+                config.acceleration ? LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE : LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT;
+        struct libinput_config_accel *accel_config = libinput_config_accel_create(accel_profile);
+
+        if(libinput_device_config_accel_apply(dev, accel_config) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
+            wlr_log(WLR_ERROR, "applying acceleration profile to device '%s' failed", name);
+        }
+        libinput_config_accel_destroy(accel_config);
+    } else {
+        wlr_log(WLR_ERROR, "acceleration and sensitivity options not available to device '%s'", name);
+    }
+
+    if(libinput_device_config_left_handed_is_available(dev)) {
+        if(libinput_device_config_left_handed_set(dev, config.left_handed) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
+            wlr_log(WLR_ERROR, "applying left handed to device '%s' failed", name);
+        }
+    } else {
+        wlr_log(WLR_ERROR, "left handed option not availabe to device '%s'", name);
+    }
+
+    libinput_device_unref(dev);
 }
