@@ -8,6 +8,7 @@
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_subcompositor.h>
 #include <wlr/util/log.h>
 
 #include "layer.h"
@@ -190,6 +191,7 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
     // struct output_config config = {0};
     // output_configure(state, output, &config);
 
+    // TODO: fix
     modeset(output, 0, 0, 0, 1.0f);
 
     output->scene_output = wlr_scene_output_create(state->scene.wlr_scene, wlr_output);

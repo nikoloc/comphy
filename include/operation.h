@@ -26,7 +26,7 @@ void
 operation_stop_resize(struct state *state);
 
 void
-operation_start_drag(struct state *state);
+operation_start_drag(struct state *state, struct wlr_drag *drag);
 
 void
 operation_stop_drag(struct state *state);

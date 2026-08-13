@@ -29,11 +29,6 @@ handle_request(struct state *state, int fd, char *buffer) {
 
     action_perform(state, type, action);
     action_destroy(type, action);
-
-    struct keybind *iter;
-    wl_list_for_each(iter, &state->keybinds, link) {
-        wlr_log(WLR_ERROR, "action: %d, key: %u, mods: %u", iter->type, iter->key, iter->modifiers);
-    }
 }
 
 static int
@@ -57,8 +52,6 @@ handle_command(int fd, u32 mask, void *data) {
         close(client_fd);
         return 0;
     }
-
-    wlr_log(WLR_DEBUG, "new ctl cmd: %s", buffer);
 
     buffer[len] = 0;
     handle_request(state, client_fd, buffer);

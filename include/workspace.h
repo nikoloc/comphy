@@ -19,7 +19,12 @@ struct workspace {
     struct wl_list slaves, floats;
     struct toplevel *fullscreen;
 
+    bool has_dirty;
     struct wl_event_source *transaction_time_out;
+    struct wl_event_source *transaction_schedule;
+    // when the toplevel unmaps we keep its last frame until the transaction finishes. such toplevel is flagged and kept
+    // here until the transaction is done, and is then destroyed for good.
+    struct wl_list ghosts;
 
     struct wl_list link;
 };

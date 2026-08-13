@@ -251,6 +251,13 @@ handle_unmap(struct wl_listener *listener, void *data) {
         case TOPLEVEL_STATE_TILED: {
             layout_remove(toplevel);
             layout_configure(state, toplevel->workspace);
+
+            // add it as a ghost for the next transaction. TODO: this may be done in a cleaner manner
+            toplevel->is_ghost = true;
+            wl_list_insert(&workspace->ghosts, &toplevel->link);
+            wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
+            transaction_mark_dirty(state, toplevel);
+
             break;
         }
         case TOPLEVEL_STATE_FLOAT: {
@@ -270,7 +277,7 @@ handle_unmap(struct wl_listener *listener, void *data) {
     }
 }
 
-void
+static void
 send_frame_done_iter(struct wlr_scene_node *node, struct timespec *now) {
     switch(node->type) {
         case WLR_SCENE_NODE_TREE: {
@@ -294,8 +301,8 @@ send_frame_done_iter(struct wlr_scene_node *node, struct timespec *now) {
     }
 }
 
-static void
-send_frame_done(struct toplevel *toplevel) {
+void
+toplevel_send_frame_done(struct toplevel *toplevel) {
     struct timespec now = time_now_timespec();
     send_frame_done_iter(&toplevel->scene_tree->node, &now);
 }
@@ -342,9 +349,12 @@ handle_commit(struct wl_listener *listener, void *data) {
     if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
         // we conform to the size it chose, even if its not the one we requested, or we did not request it at all
         struct wlr_box *geometry = &toplevel->wlr_toplevel->base->geometry;
+
+        wlr_log(WLR_DEBUG, "toplevel '%p' commited with size %dx%d", (void *)toplevel, geometry->width,
+                geometry->height);
+
         toplevel->pending.width = geometry->width;
         toplevel->pending.height = geometry->height;
-        wlr_log(WLR_DEBUG, "toplevel '%p' changed size to %dx%d", (void *)toplevel, geometry->width, geometry->height);
 
         // need to add the border size to the box
         if(should_have_border(state, toplevel)) {
@@ -360,7 +370,7 @@ handle_commit(struct wl_listener *listener, void *data) {
         return;
     }
 
-    if(!toplevel->is_dirty) {
+    if(toplevel->transaction_state != TRANSACTION_STATE_DIRTY) {
         wlr_log(WLR_DEBUG, "toplevel commited but not dirty");
         return;
     }
@@ -370,7 +380,7 @@ handle_commit(struct wl_listener *listener, void *data) {
         wlr_log(WLR_DEBUG, "toplevel commited but old serial");
         // send a frame event, this makes the client commit a new buffer, conforming to our new state, in order to
         // conform to our transaction state. kinda hacky, but thats just how clients operate under wayland
-        send_frame_done(toplevel);
+        toplevel_send_frame_done(toplevel);
         return;
     }
 
@@ -379,19 +389,20 @@ handle_commit(struct wl_listener *listener, void *data) {
     transaction_commit(state, toplevel);
 }
 
+void
+toplevel_finalize_destroy(struct toplevel *toplevel) {
+    // we need to manually destroy it since we manually created it. NOTE: this is also going to destroy the snapshot
+    // tree if it exists
+    wlr_scene_node_destroy(&toplevel->scene_tree->node);
+    free(toplevel);
+}
+
 static void
 handle_destroy(struct wl_listener *listener, void *data) {
     UNUSED(data);
 
     struct toplevel *toplevel = CONTAINER_OF(listener, struct toplevel, destroy);
 
-    if(toplevel->transaction_schedule_idle) {
-        wl_event_source_remove(toplevel->transaction_schedule_idle);
-    }
-
-    // we need to manually destroy it since we manually created it. note: this is also going to destroy the snapshot
-    // tree if it exists
-    wlr_scene_node_destroy(&toplevel->scene_tree->node);
     wlr_foreign_toplevel_handle_v1_destroy(toplevel->foreign_toplevel_handle);
 
     wl_list_remove(&toplevel->map.link);
@@ -405,7 +416,12 @@ handle_destroy(struct wl_listener *listener, void *data) {
     wl_list_remove(&toplevel->set_app_id.link);
     wl_list_remove(&toplevel->set_title.link);
 
-    free(toplevel);
+    if(toplevel->is_ghost) {
+        // dont destroy it fully, but keep the presentation and the pointer valid
+        return;
+    }
+
+    toplevel_finalize_destroy(toplevel);
 }
 
 static void
@@ -741,11 +757,10 @@ toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_bo
     height = MAX(height, 1);
 
     if(width == toplevel->requested_width && height == toplevel->requested_height) {
-        // since we might be in the middle of `layout_configure()` here, we dont want to commit it right
-        // away, as we need to wait for all other toplevels to be informed about its new state. hence, we
-        // delay the commit in the event loop, meaning its going to be performed after the current event is
-        // processed at least.
-        transaction_schedule_commit(state, toplevel);
+        // this toplevel is ready by default. here we schedule a commit for the workspace, since we dont know if there
+        // are going to be other toplevels that are dirty. if not, the idle is going to commit this one or any other
+        // that may also not need the commit by the toplevel.
+        transaction_schedule_commit(state, toplevel->workspace);
         return;
     };
 

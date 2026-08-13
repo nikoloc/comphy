@@ -1,6 +1,7 @@
 #include "transaction.h"
 
 #include "comphy.h"
+#include "util/macros.h"
 #include "wlr/util/log.h"
 #include "workspace.h"
 
@@ -33,7 +34,6 @@ scene_node_snapshot(struct wlr_scene_node *node, int lx, int ly, struct wlr_scen
             wlr_scene_buffer_set_source_box(snapshot_buffer, &scene_buffer->src_box);
             wlr_scene_buffer_set_transform(snapshot_buffer, scene_buffer->transform);
             wlr_scene_buffer_set_filter_mode(snapshot_buffer, scene_buffer->filter_mode);
-
             wlr_scene_buffer_set_opacity(snapshot_buffer, scene_buffer->opacity);
 
             snapshot_buffer->node.data = scene_buffer->node.data;
@@ -74,26 +74,26 @@ static bool
 all_ready(struct state *state, struct workspace *workspace) {
     struct wlr_box dummy;
     if(state->operation == OPERATION_MOVE && state->grabbed_toplevel &&
-            // wlr_box_intersection(&dummy, &state->grabbed_toplevel->pending, &workspace->output->full_area) &&
-            state->grabbed_toplevel->is_dirty) {
+            wlr_box_intersection(&dummy, &state->grabbed_toplevel->pending, &workspace->output->full_area) &&
+            state->grabbed_toplevel->transaction_state == TRANSACTION_STATE_DIRTY) {
         return false;
     }
 
-    if(workspace->master && workspace->master->is_dirty) {
+    if(workspace->master && workspace->master->transaction_state == TRANSACTION_STATE_DIRTY) {
         wlr_log(WLR_DEBUG, "workspace '%d' master dirty", workspace->idx);
         return false;
     }
 
     struct toplevel *iter;
     wl_list_for_each(iter, &workspace->floats, link) {
-        if(iter->is_dirty) {
+        if(iter->transaction_state == TRANSACTION_STATE_DIRTY) {
             wlr_log(WLR_DEBUG, "workspace '%d' float dirty", workspace->idx);
             return false;
         }
     }
 
     wl_list_for_each(iter, &workspace->slaves, link) {
-        if(iter->is_dirty) {
+        if(iter->transaction_state == TRANSACTION_STATE_DIRTY) {
             wlr_log(WLR_DEBUG, "workspace '%d' slave dirty", workspace->idx);
             return false;
         }
@@ -131,6 +131,7 @@ clip(struct state *state, struct toplevel *toplevel) {
     struct wlr_box *geometry = &toplevel->wlr_toplevel->base->geometry;
     int width = toplevel->current.width;
     int height = toplevel->current.height;
+
     if(toplevel->has_border) {
         width -= 2 * state->config.border.width;
         height -= 2 * state->config.border.width;
@@ -158,6 +159,13 @@ clip(struct state *state, struct toplevel *toplevel) {
 
 static void
 commit(struct state *state, struct toplevel *toplevel) {
+    if(toplevel->transaction_state == TRANSACTION_STATE_DIRTY) {
+        // request a new frame since we are commiting it with no good state
+        toplevel_send_frame_done(toplevel);
+    }
+
+    // return the transaction state for this toplevel to the default one
+    toplevel->transaction_state = TRANSACTION_STATE_CLEAN;
     toplevel->current = toplevel->pending;
 
     // update the presentation
@@ -192,53 +200,68 @@ commit(struct state *state, struct toplevel *toplevel) {
 }
 
 static void
-commit_all(struct state *state, struct workspace *workspace, bool time_out) {
+remove_ghosts(struct workspace *workspace) {
+    struct toplevel *iter, *tmp;
+    wl_list_for_each_safe(iter, tmp, &workspace->ghosts, link) {
+        toplevel_finalize_destroy(iter);
+    }
+
+    // reset the list
+    wl_list_init(&workspace->ghosts);
+}
+
+static void
+commit_all(struct state *state, struct workspace *workspace) {
     struct wlr_box dummy;
-    if(state->operation == OPERATION_MOVE && state->grabbed_toplevel &&
+    if(state->operation == OPERATION_MOVE &&
             wlr_box_intersection(&dummy, &state->grabbed_toplevel->pending, &workspace->output->full_area)) {
         commit(state, state->grabbed_toplevel);
-        if(time_out) {
-            state->grabbed_toplevel->is_dirty = false;
-        }
     }
 
     if(workspace->master) {
         commit(state, workspace->master);
-        if(time_out) {
-            workspace->master->is_dirty = false;
-        }
     }
 
     struct toplevel *iter;
     wl_list_for_each(iter, &workspace->floats, link) {
         commit(state, iter);
-        if(time_out) {
-            iter->is_dirty = false;
-        }
     }
 
     wl_list_for_each(iter, &workspace->slaves, link) {
         commit(state, iter);
-        if(time_out) {
-            iter->is_dirty = false;
-        }
+    }
+
+    remove_ghosts(workspace);
+    workspace->has_dirty = false;
+}
+
+static void
+remove_time_out(struct workspace *workspace) {
+    if(workspace->transaction_time_out) {
+        wl_event_source_remove(workspace->transaction_time_out);
+        workspace->transaction_time_out = NULL;
     }
 }
 
 void
 transaction_commit(struct state *state, struct toplevel *toplevel) {
+    if(toplevel->transaction_state != TRANSACTION_STATE_DIRTY) {
+        ASSERT(toplevel->state == TOPLEVEL_STATE_FLOAT);
+
+        // not needed, but means the toplevel changed its size on its own. allow it
+        commit(state, toplevel);
+        return;
+    }
+
     wlr_log(WLR_DEBUG, "toplevel '%p' transaction commit", (void *)toplevel);
 
-    toplevel->is_dirty = false;
+    toplevel->transaction_state = TRANSACTION_STATE_READY;
 
     struct workspace *workspace = toplevel->workspace;
     if(toplevel->state == TOPLEVEL_STATE_FULLSCREEN) {
         // dont need anything else
         commit(state, toplevel);
-        if(workspace->transaction_time_out) {
-            wl_event_source_remove(workspace->transaction_time_out);
-            workspace->transaction_time_out = NULL;
-        }
+        remove_time_out(workspace);
         return;
     }
 
@@ -249,34 +272,9 @@ transaction_commit(struct state *state, struct toplevel *toplevel) {
     }
 
     wlr_log(WLR_DEBUG, "transaction ready");
-
     // all ready, remove the time out and commit all the toplevels
-    if(workspace->transaction_time_out) {
-        wl_event_source_remove(workspace->transaction_time_out);
-        workspace->transaction_time_out = NULL;
-    }
-
-    commit_all(state, workspace, false);
-}
-
-static void
-idle(void *data) {
-    struct toplevel *toplevel = data;
-    struct state *state = state_get();
-
-    transaction_commit(state, toplevel);
-    toplevel->transaction_schedule_idle = NULL;
-}
-
-void
-transaction_schedule_commit(struct state *state, struct toplevel *toplevel) {
-    if(toplevel->transaction_schedule_idle) {
-        // already armed
-        return;
-    }
-
-    struct wl_event_loop *event_loop = wl_display_get_event_loop(state->display);
-    toplevel->transaction_schedule_idle = wl_event_loop_add_idle(event_loop, idle, toplevel);
+    remove_time_out(workspace);
+    commit_all(state, workspace);
 }
 
 int
@@ -286,30 +284,65 @@ transaction_time_out(void *data) {
 
     wlr_log(WLR_DEBUG, "transaction for workspace '%d' timed out", workspace->idx);
 
-    wl_event_source_remove(workspace->transaction_time_out);
-    workspace->transaction_time_out = NULL;
-
-    commit_all(state, workspace, true);
+    remove_time_out(workspace);
+    commit_all(state, workspace);
 
     return 0;
 }
 
+static void
+idle(void *data) {
+    struct workspace *workspace = data;
+    struct state *state = state_get();
+
+    wlr_log(WLR_DEBUG, "workspace '%d' commited on idle", workspace->idx);
+
+    commit_all(state, workspace);
+    workspace->transaction_schedule = NULL;
+}
+
 void
-transaction_mark_dirty(struct state *state, struct toplevel *toplevel) {
-    if(toplevel->is_dirty) {
+transaction_schedule_commit(struct state *state, struct workspace *workspace) {
+    if(workspace->transaction_schedule || workspace->has_dirty) {
+        // already armed or there is a dirty toplevel here already, so we dont want an idle
         return;
     }
 
-    toplevel->is_dirty = true;
+    struct wl_event_loop *event_loop = wl_display_get_event_loop(state->display);
+    workspace->transaction_schedule = wl_event_loop_add_idle(event_loop, idle, workspace);
+}
+
+void
+transaction_mark_dirty(struct state *state, struct toplevel *toplevel) {
+    if(toplevel->transaction_state == TRANSACTION_STATE_DIRTY) {
+        // already marked
+        return;
+    }
+
+    toplevel->transaction_state = TRANSACTION_STATE_DIRTY;
+
+    if(toplevel->snapshot_tree) {
+        // leftover if the previous transaction did not finish
+        wlr_scene_node_destroy(&toplevel->snapshot_tree->node);
+    }
 
     // create the snapshot tree to replace it until the new buffer is ready
     wlr_scene_node_set_enabled(&toplevel->content_tree->node, false);
     toplevel->snapshot_tree = scene_tree_snapshot(toplevel->content_tree);
 
     struct workspace *workspace = toplevel->workspace;
+    workspace->has_dirty = true;
     if(!workspace->transaction_time_out) {
+        // if this is the first toplevel for the transaction create the timer
         struct wl_event_loop *event_loop = wl_display_get_event_loop(state->display);
         workspace->transaction_time_out = wl_event_loop_add_timer(event_loop, transaction_time_out, workspace);
     }
     wl_event_source_timer_update(workspace->transaction_time_out, COMPHY_TRANSACTION_TIME_OUT_MS);
+
+    if(workspace->transaction_schedule) {
+        // remove an idle if there was one armed
+        wl_event_source_remove(workspace->transaction_schedule);
+        workspace->transaction_schedule = NULL;
+        return;
+    }
 }

@@ -37,7 +37,7 @@ keyboard_set_keymap(struct keyboard *keyboard, char *xkb_layouts, char *xkb_vari
         wlr_log(WLR_ERROR, "could not apply the desired configuration to the keyboard");
 
         keymap = xkb_keymap_new_from_names(context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
-        if(keymap) {
+        if(!keymap) {
             wlr_log(WLR_ERROR, "could not apply the default configuration to the keyboard");
             xkb_context_unref(context);
             return;

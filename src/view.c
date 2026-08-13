@@ -92,6 +92,7 @@ view_root_parent_of_surface(struct wlr_surface *surface) {
 
 enum view *
 view_at(struct state *state, double lx, double ly, struct wlr_surface **surface, double *sx, double *sy) {
+    // TODO: handle snapshots
     struct wlr_scene_node *node = wlr_scene_node_at(&state->scene.wlr_scene->tree.node, lx, ly, sx, sy);
     if(!node) {
         return NULL;

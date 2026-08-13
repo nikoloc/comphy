@@ -19,6 +19,11 @@ cursor_set_image(struct state *state, char *image) {
 
 void
 cursor_focus(struct state *state, u32 time_ms, bool handle_keyboard_focus) {
+    if(state->grabbed_toplevel) {
+        // keep focus
+        return;
+    }
+
     double sx, sy;
     struct wlr_surface *surface = NULL;
     enum view *view = view_at(state, state->cursor.wlr_cursor->x, state->cursor.wlr_cursor->y, &surface, &sx, &sy);

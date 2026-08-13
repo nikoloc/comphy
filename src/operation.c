@@ -1,5 +1,6 @@
 #include "operation.h"
 
+#include <wlr/types/wlr_data_device.h>
 #include <wlr/util/log.h>
 #include <wlr/xcursor.h>
 
@@ -206,10 +207,30 @@ operation_stop_resize(struct state *state) {
     stop_shared(state);
 }
 
+static void
+handle_destroy_drag(struct wl_listener *listener, void *data) {
+    UNUSED(listener), UNUSED(data);
+
+    struct state *state = state_get();
+
+    state->operation = OPERATION_NONE;
+    wl_list_remove(&state->seat.destroy_drag.link);
+
+    cursor_focus(state, time_now_ms(), false);
+}
+
 void
-operation_start_drag(struct state *state) {
-    // TODO:
-    UNUSED(state);
+operation_start_drag(struct state *state, struct wlr_drag *drag) {
+    state->operation = OPERATION_DRAG;
+
+    if(drag->icon) {
+        wlr_scene_drag_icon_create(state->scene.trees.grab, drag->icon);
+    }
+
+    cursor_set_image(state, "grab");
+
+    state->seat.destroy_drag.notify = handle_destroy_drag;
+    wl_signal_add(&drag->events.destroy, &state->seat.destroy_drag);
 }
 
 void
@@ -269,6 +290,11 @@ resize(struct state *state) {
     int min_width = MAX(toplevel->wlr_toplevel->current.min_width, 10);
     int min_height = MAX(toplevel->wlr_toplevel->current.min_height, 10);
 
+    if(toplevel->has_border) {
+        min_width += 2 * state->config.border.width;
+        min_height += 2 * state->config.border.width;
+    }
+
     if(state->resize_edges & WLR_EDGE_TOP) {
         box.y = initial.y + (cursor_y - grab_y);
         box.height = initial.height - (cursor_y - grab_y);
@@ -317,7 +343,8 @@ operation_tick(struct state *state) {
             break;
         }
         case OPERATION_DRAG: {
-            // drag(state);
+            wlr_scene_node_set_position(&state->scene.trees.grab->node, state->cursor.wlr_cursor->x,
+                    state->cursor.wlr_cursor->y);
             break;
         }
     }

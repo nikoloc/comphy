@@ -54,8 +54,8 @@ toggle_float(struct state *state) {
 
 static inline void
 update_border_color(struct state *state, struct toplevel *toplevel) {
-    color_t color =
-            toplevel == state->focused_toplevel ? state->config.border.color.active : state->config.border.color.active;
+    color_t color = toplevel == state->focused_toplevel ? state->config.border.color.active
+                                                        : state->config.border.color.inactive;
     toplevel_set_border_color(toplevel, color);
 }
 

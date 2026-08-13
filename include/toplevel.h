@@ -6,6 +6,7 @@
 #include <wlr/types/wlr_xdg_shell.h>
 
 #include "color.h"
+#include "transaction.h"
 #include "util/ints.h"
 #include "view.h"
 
@@ -25,10 +26,8 @@ struct toplevel {
     enum toplevel_state state, prev_state;
     struct wlr_box prev_geometry;
 
-    bool is_resizing;
-
     u32 configure_serial;
-    bool is_dirty;
+    enum transaction_state transaction_state;
 
     struct wlr_box current, pending;
     // parametars of the last `toplevel_configure()` call that were request of this toplevel. we need those because even
@@ -50,7 +49,7 @@ struct toplevel {
     struct wlr_scene_rect *border;
 
     struct wlr_scene_tree *snapshot_tree;
-    struct wl_event_source *transaction_schedule_idle;
+    bool is_ghost;
 
     struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel_handle;
 
@@ -99,5 +98,11 @@ toplevel_set_border_color(struct toplevel *toplevel, color_t color);
 // for the transaction system and sends the 'hacks' to the toplevel based on state
 void
 toplevel_update_state(struct toplevel *toplevel, enum toplevel_state state);
+
+void
+toplevel_send_frame_done(struct toplevel *toplevel);
+
+void
+toplevel_finalize_destroy(struct toplevel *toplevel);
 
 #endif
