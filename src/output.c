@@ -209,10 +209,10 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
     output->dummy_workspace = workspace_create(state, output, 1);
 
     // initialize per output layers on this output
-    wl_list_init(&output->layer.background);
-    wl_list_init(&output->layer.bottom);
-    wl_list_init(&output->layer.top);
-    wl_list_init(&output->layer.overlay);
+    wl_list_init(&output->layers.background);
+    wl_list_init(&output->layers.bottom);
+    wl_list_init(&output->layers.top);
+    wl_list_init(&output->layers.overlay);
 
     // insert it into the global list
     wl_list_insert(&state->outputs, &output->link);
@@ -255,13 +255,13 @@ output_focus(struct state *state, struct output *output) {
     // go from the top most tree and find the view that accepts keyboard focus
     {
         struct layer *iter;
-        wl_list_for_each(iter, &output->layer.overlay, link) {
+        wl_list_for_each(iter, &output->layers.overlay, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
                 // layer_focus(state, iter);
                 return;
             }
         }
-        wl_list_for_each(iter, &output->layer.top, link) {
+        wl_list_for_each(iter, &output->layers.top, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
                 // layer_focus(state, iter);
                 return;
@@ -290,13 +290,13 @@ output_focus(struct state *state, struct output *output) {
     // lookup bottom and backgroud layers. note: there cant be any slaves if there is no master
     {
         struct layer *iter;
-        wl_list_for_each(iter, &output->layer.bottom, link) {
+        wl_list_for_each(iter, &output->layers.bottom, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
                 // layer_focus(state, iter);
                 return;
             }
         }
-        wl_list_for_each(iter, &output->layer.background, link) {
+        wl_list_for_each(iter, &output->layers.background, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
                 // layer_focus(state, iter);
                 return;

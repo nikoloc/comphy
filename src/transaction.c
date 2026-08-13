@@ -1,5 +1,6 @@
 #include "transaction.h"
 
+#include "box_helpers.h"
 #include "comphy.h"
 #include "util/macros.h"
 #include "wlr/util/log.h"
@@ -166,12 +167,21 @@ commit(struct state *state, struct toplevel *toplevel) {
 
     // return the transaction state for this toplevel to the default one
     toplevel->transaction_state = TRANSACTION_STATE_CLEAN;
-    toplevel->current = toplevel->pending;
 
     // update the presentation
     if(toplevel->needs_initial_enable) {
         wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
         toplevel->needs_initial_enable = false;
+    }
+
+    if(toplevel->state == TOPLEVEL_STATE_FLOAT && toplevel->needs_centering) {
+        // this means the client timed out and its pending stuff is all zeros, we patch it with current
+        struct wlr_box output_box = toplevel->workspace->output->usable_area;
+        toplevel->current = wlr_box_centered_in(&output_box, toplevel->current.width, toplevel->current.height);
+
+        toplevel->needs_centering = false;
+    } else {
+        toplevel->current = toplevel->pending;
     }
 
     clip(state, toplevel);

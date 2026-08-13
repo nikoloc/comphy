@@ -1,5 +1,6 @@
 #include "view.h"
 
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -185,4 +186,20 @@ view_get_lock_surface(enum view *view) {
     }
 
     return NULL;
+}
+
+void
+view_unfocus(struct state *state) {
+    if(state->focused_toplevel) {
+        struct toplevel *toplevel = state->focused_toplevel;
+
+        wlr_xdg_toplevel_set_activated(toplevel->wlr_toplevel, false);
+        wlr_foreign_toplevel_handle_v1_set_activated(toplevel->foreign_toplevel_handle, false);
+        toplevel_set_border_color(toplevel, state->config.border.color.inactive);
+    }
+
+    state->focused_toplevel = NULL;
+    state->focused_layer = NULL;
+
+    wlr_seat_keyboard_notify_clear_focus(state->seat.wlr_seat);
 }

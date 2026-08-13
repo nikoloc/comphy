@@ -28,6 +28,9 @@ view_get_output(enum view *view);
 void
 view_focus(struct state *state, enum view *view);
 
+void
+view_unfocus(struct state *state);
+
 struct toplevel *
 view_get_toplevel(enum view *view);
 

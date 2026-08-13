@@ -4,12 +4,11 @@
 #include <stdbool.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 
-#include "output.h"
 #include "view.h"
 
 struct layer {
     struct wlr_layer_surface_v1 *wlr_layer;
-    struct wlr_scene_layer_surface_v1 *scene;
+    struct wlr_scene_layer_surface_v1 *scene_tree;
 
     enum view view;
 
@@ -26,12 +25,12 @@ struct layer *
 layer_create(struct state *state, struct wlr_layer_surface_v1 *wlr_layer);
 
 void
-layer_surfaces_commit(struct state *state, struct output *output);
-
-void
 layer_focus(struct state *state, struct layer *layer);
 
 void
-layer_under_fullscreen_set_enabled(struct state *state, struct output *output, bool enable);
+layer_unfocus(struct state *state);
+
+void
+layers_arrange(struct state *state, struct output *output);
 
 #endif

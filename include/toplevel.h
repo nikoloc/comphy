@@ -22,9 +22,8 @@ struct toplevel {
 
     enum view view;
 
-    // `prev_state` and `prev_geometry` are used to return the fullscreen toplevel to a previous state
+    // `prev_state` are used to return the fullscreen toplevel to a previous state
     enum toplevel_state state, prev_state;
-    struct wlr_box prev_geometry;
 
     u32 configure_serial;
     enum transaction_state transaction_state;

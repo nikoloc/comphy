@@ -45,8 +45,8 @@ handle_commit(struct wl_listener *listener, void *data) {
             struct output *output = layer->wlr_layer->output->data;
 
             box = output->full_area;
-            box.x -= layer->scene->tree->node.x;
-            box.y -= layer->scene->tree->node.y;
+            box.x -= layer->scene_tree->tree->node.x;
+            box.y -= layer->scene_tree->tree->node.y;
         }
 
         wlr_xdg_popup_unconstrain_from_box(popup->wlr_popup, &box);

@@ -219,11 +219,6 @@ handle_unmap(struct wl_listener *listener, void *data) {
 
     struct workspace *workspace = toplevel->workspace;
 
-    if(toplevel == state->prev_focused) {
-        // remove the invalid pointer
-        state->prev_focused = NULL;
-    }
-
     if(toplevel == state->focused_toplevel) {
         state->focused_toplevel = NULL;
     }
@@ -617,7 +612,49 @@ toplevel_focus(struct state *state, struct toplevel *toplevel) {
 
 void
 toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace) {
-    // TODO
+    if(toplevel == state->grabbed_toplevel || toplevel->workspace == workspace) {
+        return;
+    }
+
+    struct workspace *old_workspace = toplevel->workspace;
+
+    switch(toplevel->state) {
+        case TOPLEVEL_STATE_TILED: {
+            layout_remove(toplevel);
+            layout_add(workspace, toplevel);
+            layout_configure(state, old_workspace);
+            layout_configure(state, workspace);
+            break;
+        }
+        case TOPLEVEL_STATE_FLOAT: {
+            toplevel->workspace = workspace;
+            wl_list_remove(&toplevel->link);
+            wl_list_insert(&workspace->floats, &toplevel->link);
+
+            // center it on the new output
+            struct wlr_box *output_box = &workspace->output->usable_area;
+            struct wlr_box box = {
+                    .x = output_box->x + (output_box->width - toplevel->current.width) / 2,
+                    .y = output_box->y + (output_box->height - toplevel->current.height) / 2,
+                    .width = toplevel->current.width,
+                    .height = toplevel->current.height,
+            };
+            toplevel_configure(state, toplevel, &box);
+            break;
+        }
+        case TOPLEVEL_STATE_FULLSCREEN: {
+            if(workspace->fullscreen) {
+                // cant move this one
+                return;
+            }
+
+            struct output *output = workspace->output;
+            toplevel_configure(state, toplevel, &output->full_area);
+            break;
+        }
+    }
+
+    workspace_set_active(state, workspace);
 }
 
 u32
@@ -660,7 +697,7 @@ set_fullscreen(struct state *state, struct toplevel *toplevel) {
     struct workspace *workspace = toplevel->workspace;
     struct output *output = workspace->output;
 
-    toplevel->prev_geometry = toplevel->current;
+    toplevel->prev_state = toplevel->state;
 
     workspace->fullscreen = toplevel;
     toplevel_update_state(toplevel, TOPLEVEL_STATE_FULLSCREEN);
@@ -684,10 +721,14 @@ unset_fullscreen(struct state *state, struct toplevel *toplevel) {
 
     toplevel_update_state(toplevel, toplevel->prev_state);
     if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
-        toplevel_configure(state, toplevel, &toplevel->prev_geometry);
+        int width, height;
+        default_size(state, toplevel, &width, &height);
+        toplevel_configure(state, toplevel, &(struct wlr_box){0});
+    } else {
+        layout_add(workspace, toplevel);
+        layout_configure(state, workspace);
     }
 
-    layout_configure(state, workspace);
     wlr_foreign_toplevel_handle_v1_set_fullscreen(toplevel->foreign_toplevel_handle, false);
 }
 
@@ -782,45 +823,6 @@ toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_bo
 //
 //   pointer_handle_focus(now.tv_sec * 1000 + now.tv_nsec / 1000, false);
 // }
-// void
-// toplevel_tiled_insert_into_layout(struct mwc_toplevel *toplevel, uint32_t x, uint32_t y) {
-//   struct mwc_workspace *workspace = server.active_workspace;
-//
-//   toplevel->workspace = workspace;
-//
-//   struct mwc_toplevel *under_cursor = layout_toplevel_at(workspace, x, y);
-//
-//   if(under_cursor == NULL) {
-//     if(wl_list_length(&workspace->masters) < server.config->master_count) {
-//       wl_list_insert(workspace->masters.prev, &toplevel->link);
-//     } else {
-//       wl_list_insert(workspace->slaves.prev, &toplevel->link);
-//     }
-//   } else {
-//     bool on_left_side = x <= under_cursor->current.x + under_cursor->current.width / 2;
-//     bool on_top_side = y <= under_cursor->current.y + under_cursor->current.height / 2;
-//     bool under_cursor_is_master = toplevel_is_master(under_cursor);
-//
-//     /* we insert it before under_cursor if either:
-//      *   - its last master and there are some slaves
-//      *   - cursor is on left (top) */
-//     if((under_cursor_is_master && &under_cursor->link == workspace->masters.prev
-//        && wl_list_length(&workspace->slaves) > 0)
-//        || (under_cursor_is_master && on_left_side)
-//        || (!under_cursor_is_master && on_top_side)) {
-//       wl_list_insert(under_cursor->link.prev, &toplevel->link);
-//     } else {
-//       wl_list_insert(&under_cursor->link, &toplevel->link);
-//     }
-//
-//     if(wl_list_length(&workspace->masters) > server.config->master_count) {
-//       struct mwc_toplevel *last = wl_container_of(workspace->masters.prev, last, link);
-//       wl_list_remove(&last->link);
-//       wl_list_insert(workspace->slaves.prev, &last->link);
-//     }
-//   }
-// }
-//
 // void
 // xdg_activation_handle_token_destroy(struct wl_listener *listener, void *data) {
 // 	struct mwc_token *token_data = wl_container_of(listener, token_data, destroy);

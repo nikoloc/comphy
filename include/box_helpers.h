@@ -39,4 +39,14 @@ wlr_box_add_gaps(struct wlr_box *box, int gaps) {
     box->height += 2 * gaps;
 }
 
+static inline struct wlr_box
+wlr_box_centered_in(struct wlr_box *box, int width, int height) {
+    return (struct wlr_box){
+            .x = box->x + (box->width - width) / 2.0f,
+            .y = box->y + (box->height - height) / 2.0f,
+            .width = width,
+            .height = height,
+    };
+}
+
 #endif

@@ -1,9 +1,17 @@
 #include "layer_shell.h"
 
 #include "comphy.h"
+#include "layer.h"
+#include "state.h"
+#include "util/macros.h"
 
 static void
 handle_new_layer(struct wl_listener *listener, void *data) {
+    UNUSED(listener);
+    struct wlr_layer_surface_v1 *wlr_layer = data;
+    struct state *state = state_get();
+
+    layer_create(state, wlr_layer);
 }
 
 void

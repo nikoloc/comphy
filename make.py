@@ -69,6 +69,7 @@ ctx.add_source(
         "src/gamma_control.c",
         "src/keybind.c",
         "src/keyboard.c",
+        "src/layer.c",
         "src/layer_shell.c",
         "src/layout.c",
         "src/lock.c",

@@ -57,7 +57,6 @@ struct state {
     struct lock_surface *focused_lock;
     struct layer *focused_layer;
     bool is_exclusive;
-    struct toplevel *prev_focused;
     struct toplevel *focused_toplevel;
 
     struct wlr_pointer_constraints_v1 *pointer_contrains_manager;

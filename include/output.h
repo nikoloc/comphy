@@ -26,7 +26,7 @@ struct output {
         struct wl_list bottom;
         struct wl_list top;
         struct wl_list overlay;
-    } layer;
+    } layers;
 
     // when the output is created we create a dummy workspace for it to serve until the user creates a real workspace.
     // on the creation of the first real workspace we just repace the dummy one with the new one.
