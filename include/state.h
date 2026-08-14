@@ -52,7 +52,9 @@ struct state {
     u32 resize_edges;
     bool client_driven_move_resize;
 
-    struct workspace *active_workspace;
+    // in order for the workspace switching to be atomic, we wait for its transaction to finish and only switch to it
+    // afterwards. `workspace_set_active()` thus sets the `state->pending_workspace` and schedules a transaction commit
+    struct workspace *active_workspace, *pending_workspace;
 
     struct lock_surface *focused_lock;
     struct layer *focused_layer;

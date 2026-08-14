@@ -629,33 +629,34 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
             break;
         }
         case TOPLEVEL_STATE_FLOAT: {
-            toplevel->workspace = workspace;
             wl_list_remove(&toplevel->link);
             wl_list_insert(&workspace->floats, &toplevel->link);
 
-            // center it on the new output
-            struct wlr_box *output_box = &workspace->output->usable_area;
-            struct wlr_box box = {
-                    .x = output_box->x + (output_box->width - toplevel->current.width) / 2,
-                    .y = output_box->y + (output_box->height - toplevel->current.height) / 2,
-                    .width = toplevel->current.width,
-                    .height = toplevel->current.height,
-            };
-            toplevel_configure(state, toplevel, &box);
+            if(old_workspace->output != workspace->output) {
+                // center it on the new output
+                struct wlr_box *output_box = &workspace->output->usable_area;
+                struct wlr_box box = {
+                        .x = output_box->x + (output_box->width - toplevel->current.width) / 2,
+                        .y = output_box->y + (output_box->height - toplevel->current.height) / 2,
+                        .width = toplevel->current.width,
+                        .height = toplevel->current.height,
+                };
+                toplevel_configure(state, toplevel, &box);
+            }
             break;
         }
         case TOPLEVEL_STATE_FULLSCREEN: {
             if(workspace->fullscreen) {
-                // cant move this one
-                return;
+                // remove the current one
+                toplevel_set_fullscreen(state, workspace->fullscreen, false);
             }
 
-            struct output *output = workspace->output;
-            toplevel_configure(state, toplevel, &output->full_area);
+            toplevel_configure(state, toplevel, &workspace->output->full_area);
             break;
         }
     }
 
+    toplevel->workspace = workspace;
     workspace_set_active(state, workspace);
 }
 
@@ -720,7 +721,6 @@ unset_fullscreen(struct state *state, struct toplevel *toplevel) {
     workspace->fullscreen = NULL;
 
     wlr_xdg_toplevel_set_fullscreen(toplevel->wlr_toplevel, false);
-
     toplevel_update_state(toplevel, toplevel->prev_state);
     if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
         int width, height;

@@ -45,7 +45,7 @@ pointer_if_trackpad_set_tap_to_click(struct pointer *pointer, bool tap_to_click)
 void
 pointer_if_trackpad_set_dwt(struct pointer *pointer, bool dwt) {
     if(!wlr_input_device_is_libinput(&pointer->wlr_pointer->base)) {
-        wlr_log(WLR_ERROR, "could not configure pointer device");
+        wlr_log(WLR_ERROR, "pointer device is not libinput");
         return;
     }
 
@@ -70,7 +70,7 @@ pointer_if_trackpad_set_dwt(struct pointer *pointer, bool dwt) {
 void
 pointer_if_trackpad_set_natural_scroll(struct pointer *pointer, bool natural_scroll) {
     if(!wlr_input_device_is_libinput(&pointer->wlr_pointer->base)) {
-        wlr_log(WLR_ERROR, "could not configure pointer device");
+        wlr_log(WLR_ERROR, "pointer device is not libinput");
         return;
     }
 
@@ -96,7 +96,7 @@ pointer_if_trackpad_set_natural_scroll(struct pointer *pointer, bool natural_scr
 void
 pointer_if_trackpad_set_scroll_method(struct pointer *pointer, enum libinput_config_scroll_method scroll_method) {
     if(!wlr_input_device_is_libinput(&pointer->wlr_pointer->base)) {
-        wlr_log(WLR_ERROR, "could not configure pointer device");
+        wlr_log(WLR_ERROR, "pointer device is not libinput");
         return;
     }
 

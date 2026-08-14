@@ -136,22 +136,8 @@ workspace_set_active(struct state *state, struct workspace *workspace) {
         return;
     }
 
-    // else remove all the toplevels on that workspace
-    struct workspace *old_workspace = workspace->output->active_workspace;
-    workspace_show_toplevels(old_workspace, false);
-    // and show this workspace's toplevels
-    workspace_show_toplevels(workspace, true);
-
-    if(state->active_workspace->output != workspace->output) {
-        // if we are changing the output then warp the cursor
-        // TODO: change so we only do this if there is no toplevel, else warp to toplevels
-        cursor_warp_output(state, workspace->output);
-    }
-
-    state->active_workspace = workspace;
-    workspace->output->active_workspace = workspace;
-
-    output_focus(state, workspace->output);
+    state->pending_workspace = workspace;
+    transaction_schedule_commit(state, workspace);
 }
 
 struct workspace *

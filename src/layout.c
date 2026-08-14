@@ -16,7 +16,7 @@ layout_add(struct workspace *workspace, struct toplevel *toplevel) {
         workspace->master = toplevel;
     } else {
         // insert it onto the bottom of the stack of slaves
-        wl_list_insert(toplevel->workspace->slaves.prev, &toplevel->link);
+        wl_list_insert(workspace->slaves.prev, &toplevel->link);
     }
 }
 

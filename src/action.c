@@ -269,13 +269,9 @@ action_perform(struct state *state, enum action_type type, void *_action) {
         case ACTION_TYPE_CHANGE_WORKSPACE: {
             struct action_change_workspace *action = _action;
 
-            wlr_log(WLR_ERROR, "start");
             struct workspace *workspace = workspace_find_by_idx(state, action->idx);
             if(workspace) {
-                wlr_log(WLR_ERROR, "found");
                 workspace_set_active(state, workspace);
-            } else {
-                wlr_log(WLR_ERROR, "not found");
             }
             break;
         }
@@ -293,7 +289,6 @@ action_perform(struct state *state, enum action_type type, void *_action) {
         }
         case ACTION_TYPE_FOCUS: {
             struct action_focus *action = _action;
-            wlr_log(WLR_ERROR, "here");
             focus(state, action->direction);
             break;
         }
@@ -508,7 +503,6 @@ action_perform(struct state *state, enum action_type type, void *_action) {
         }
         case ACTION_TYPE_CLIENT_SIDE_DECORATIONS: {
             struct action_csd *action = _action;
-            wlr_log(WLR_ERROR, "here");
             state->config.csd = action->enable;
 
             decoration_update(&state->decoration, action->enable);

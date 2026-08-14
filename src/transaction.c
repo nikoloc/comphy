@@ -81,21 +81,18 @@ all_ready(struct state *state, struct workspace *workspace) {
     }
 
     if(workspace->master && workspace->master->transaction_state == TRANSACTION_STATE_DIRTY) {
-        wlr_log(WLR_DEBUG, "workspace '%d' master dirty", workspace->idx);
         return false;
     }
 
     struct toplevel *iter;
     wl_list_for_each(iter, &workspace->floats, link) {
         if(iter->transaction_state == TRANSACTION_STATE_DIRTY) {
-            wlr_log(WLR_DEBUG, "workspace '%d' float dirty", workspace->idx);
             return false;
         }
     }
 
     wl_list_for_each(iter, &workspace->slaves, link) {
         if(iter->transaction_state == TRANSACTION_STATE_DIRTY) {
-            wlr_log(WLR_DEBUG, "workspace '%d' slave dirty", workspace->idx);
             return false;
         }
     }
@@ -221,6 +218,31 @@ remove_ghosts(struct workspace *workspace) {
 }
 
 static void
+finalize_active(struct state *state) {
+    struct workspace *workspace = state->pending_workspace;
+    struct workspace *old_workspace = state->active_workspace;
+
+    state->active_workspace = workspace;
+    state->pending_workspace = NULL;
+
+    workspace->output->active_workspace = workspace;
+
+    workspace_show_toplevels(old_workspace, false);
+    workspace_show_toplevels(workspace, true);
+
+    if(state->active_workspace->output != workspace->output) {
+        // if we are changing the output then warp the cursor
+        // TODO: change so we only do this if there is no toplevel, else warp to toplevels
+        cursor_warp_output(state, workspace->output);
+    }
+
+    state->active_workspace = workspace;
+    workspace->output->active_workspace = workspace;
+
+    output_focus(state, workspace->output);
+}
+
+static void
 commit_all(struct state *state, struct workspace *workspace) {
     struct wlr_box dummy;
     if(state->operation == OPERATION_MOVE &&
@@ -243,6 +265,10 @@ commit_all(struct state *state, struct workspace *workspace) {
 
     remove_ghosts(workspace);
     workspace->has_dirty = false;
+
+    if(workspace == state->pending_workspace) {
+        finalize_active(state);
+    }
 }
 
 static void
@@ -263,7 +289,8 @@ transaction_commit(struct state *state, struct toplevel *toplevel) {
         return;
     }
 
-    wlr_log(WLR_DEBUG, "toplevel '%p' transaction commit", (void *)toplevel);
+    wlr_log(WLR_DEBUG, "toplevel '%p' transaction commit for workspace '%d'", (void *)toplevel,
+            toplevel->workspace->idx);
 
     toplevel->transaction_state = TRANSACTION_STATE_READY;
 
@@ -272,16 +299,20 @@ transaction_commit(struct state *state, struct toplevel *toplevel) {
         // dont need anything else
         commit(state, toplevel);
         remove_time_out(workspace);
+
+        if(workspace == state->pending_workspace) {
+            finalize_active(state);
+        }
         return;
     }
 
     if(!all_ready(state, workspace)) {
-        wlr_log(WLR_DEBUG, "transaction not ready yet");
+        wlr_log(WLR_DEBUG, "transaction for workspace '%d' not ready yet", workspace->idx);
         // transaction not ready
         return;
     }
 
-    wlr_log(WLR_DEBUG, "transaction ready");
+    wlr_log(WLR_DEBUG, "transaction ready for workspace '%d'", workspace->idx);
     // all ready, remove the time out and commit all the toplevels
     remove_time_out(workspace);
     commit_all(state, workspace);
@@ -329,6 +360,8 @@ transaction_mark_dirty(struct state *state, struct toplevel *toplevel) {
         return;
     }
 
+    wlr_log(WLR_DEBUG, "toplevel '%p' marked dirty on workspace '%d'", (void *)toplevel, toplevel->workspace->idx);
+
     toplevel->transaction_state = TRANSACTION_STATE_DIRTY;
 
     if(toplevel->snapshot_tree) {
@@ -353,6 +386,10 @@ transaction_mark_dirty(struct state *state, struct toplevel *toplevel) {
         // remove an idle if there was one armed
         wl_event_source_remove(workspace->transaction_schedule);
         workspace->transaction_schedule = NULL;
-        return;
     }
+
+    // if the toplevel is not on screen currently the scene api does not send the frame events. however, we dont want to
+    // wait for the toplevel to become visible in order to get its new state applyed. hence, we send a single frame done
+    // event in order to force it to commit to the new size.
+    toplevel_send_frame_done(toplevel);
 }
