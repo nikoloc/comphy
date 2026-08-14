@@ -33,4 +33,7 @@ layer_unfocus(struct state *state);
 void
 layers_arrange(struct state *state, struct output *output);
 
+void
+layers_arrange_all(struct state *state);
+
 #endif

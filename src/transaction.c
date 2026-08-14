@@ -225,21 +225,27 @@ finalize_active(struct state *state) {
     state->active_workspace = workspace;
     state->pending_workspace = NULL;
 
+    // if it is an already active on its output, just switch to it
+    if(workspace == workspace->output->active_workspace) {
+        state->active_workspace = workspace;
+        if(!state->keep_focus_on_workspace_change) {
+            output_focus(state, workspace->output);
+        }
+
+        return;
+    }
+
     workspace->output->active_workspace = workspace;
 
     workspace_show_toplevels(old_workspace, false);
     workspace_show_toplevels(workspace, true);
 
-    if(state->active_workspace->output != workspace->output) {
-        // if we are changing the output then warp the cursor
-        // TODO: change so we only do this if there is no toplevel, else warp to toplevels
-        cursor_warp_output(state, workspace->output);
-    }
-
     state->active_workspace = workspace;
     workspace->output->active_workspace = workspace;
 
-    output_focus(state, workspace->output);
+    if(!state->keep_focus_on_workspace_change) {
+        output_focus(state, workspace->output);
+    }
 }
 
 static void
@@ -374,7 +380,6 @@ transaction_mark_dirty(struct state *state, struct toplevel *toplevel) {
     toplevel->snapshot_tree = scene_tree_snapshot(toplevel->content_tree);
 
     struct workspace *workspace = toplevel->workspace;
-    workspace->has_dirty = true;
     if(!workspace->transaction_time_out) {
         // if this is the first toplevel for the transaction create the timer
         struct wl_event_loop *event_loop = wl_display_get_event_loop(state->display);
@@ -382,14 +387,21 @@ transaction_mark_dirty(struct state *state, struct toplevel *toplevel) {
     }
     wl_event_source_timer_update(workspace->transaction_time_out, COMPHY_TRANSACTION_TIME_OUT_MS);
 
-    if(workspace->transaction_schedule) {
-        // remove an idle if there was one armed
-        wl_event_source_remove(workspace->transaction_schedule);
-        workspace->transaction_schedule = NULL;
+    if(toplevel->is_ghost) {
+        // if this toplevel is the ghost, we dont know if there are going to be other non-ghost toplevels, so in order
+        // to get it removed we schedule a commit anyway. if there are other toplevels that are going to be marked later
+        // in the same transaction they are going to remove it
+        transaction_schedule_commit(state, workspace);
+    } else {
+        // if the toplevel is not on screen currently the scene api does not send the frame events. however, we dont
+        // want to wait for the toplevel to become visible in order to get its new state applyed. hence, we send a
+        // single frame done event in order to force it to commit to the new size.
+        toplevel_send_frame_done(toplevel);
+        if(workspace->transaction_schedule) {
+            // remove an idle if there was one armed
+            wl_event_source_remove(workspace->transaction_schedule);
+            workspace->transaction_schedule = NULL;
+        }
+        workspace->has_dirty = true;
     }
-
-    // if the toplevel is not on screen currently the scene api does not send the frame events. however, we dont want to
-    // wait for the toplevel to become visible in order to get its new state applyed. hence, we send a single frame done
-    // event in order to force it to commit to the new size.
-    toplevel_send_frame_done(toplevel);
 }

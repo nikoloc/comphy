@@ -29,8 +29,6 @@ update_area(struct output *output) {
             output->wlr_output->width,
             output->wlr_output->height,
     };
-    // TODO: fix
-    output->usable_area = output->full_area;
 }
 
 static inline bool
@@ -129,7 +127,7 @@ handle_request_state(struct wl_listener *listener, void *data) {
     wlr_output_commit_state(output->wlr_output, request_state->state);
 
     update_area(output);
-    layout_reconfigure_all(state);
+    layers_arrange_all(state);
 }
 
 static void
@@ -233,11 +231,7 @@ void
 output_configure(struct state *state, struct output *output, struct output_config *config) {
     modeset(output, config->width, config->height, config->refresh, config->scale);
 
-    // if() {
-    //     return wlr_output_layout_add_auto(g.wlr_output_layout, output->wlr_output);
-    // }
-
-    // TODO: this will work for now, but add the configuration through `wlr_randr` tool
+    // TODO: modesetting
     output->output_layout_output = wlr_output_layout_add(state->output_layout, output->wlr_output, 0, 0);
 
     output->full_area = (struct wlr_box){
@@ -257,13 +251,15 @@ output_focus(struct state *state, struct output *output) {
         struct layer *iter;
         wl_list_for_each(iter, &output->layers.overlay, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                // layer_focus(state, iter);
+                layer_focus(state, iter);
+                cursor_warp_layer(state, iter);
                 return;
             }
         }
         wl_list_for_each(iter, &output->layers.top, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                // layer_focus(state, iter);
+                layer_focus(state, iter);
+                cursor_warp_layer(state, iter);
                 return;
             }
         }
@@ -272,6 +268,7 @@ output_focus(struct state *state, struct output *output) {
     struct workspace *workspace = output->active_workspace;
     if(workspace->fullscreen) {
         toplevel_focus(state, workspace->fullscreen);
+        cursor_warp_toplevel(state, workspace->fullscreen);
         return;
     }
 
@@ -279,11 +276,13 @@ output_focus(struct state *state, struct output *output) {
     if(top_most) {
         struct toplevel *toplevel = CONTAINER_OF(top_most, struct toplevel, link);
         toplevel_focus(state, toplevel);
+        cursor_warp_toplevel(state, toplevel);
         return;
     }
 
     if(workspace->master) {
         toplevel_focus(state, workspace->master);
+        cursor_warp_toplevel(state, workspace->master);
         return;
     }
 
@@ -292,13 +291,15 @@ output_focus(struct state *state, struct output *output) {
         struct layer *iter;
         wl_list_for_each(iter, &output->layers.bottom, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                // layer_focus(state, iter);
+                layer_focus(state, iter);
+                cursor_warp_layer(state, iter);
                 return;
             }
         }
         wl_list_for_each(iter, &output->layers.background, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                // layer_focus(state, iter);
+                layer_focus(state, iter);
+                cursor_warp_layer(state, iter);
                 return;
             }
         }

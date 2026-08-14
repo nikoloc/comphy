@@ -55,6 +55,7 @@ struct state {
     // in order for the workspace switching to be atomic, we wait for its transaction to finish and only switch to it
     // afterwards. `workspace_set_active()` thus sets the `state->pending_workspace` and schedules a transaction commit
     struct workspace *active_workspace, *pending_workspace;
+    bool keep_focus_on_workspace_change;
 
     struct lock_surface *focused_lock;
     struct layer *focused_layer;

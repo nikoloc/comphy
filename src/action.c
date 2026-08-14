@@ -13,7 +13,6 @@
 #include "system.h"
 #include "util/macros.h"
 #include "util/memory.h"
-#include "wlr/util/log.h"
 #include "workspace.h"
 
 static void
@@ -271,7 +270,7 @@ action_perform(struct state *state, enum action_type type, void *_action) {
 
             struct workspace *workspace = workspace_find_by_idx(state, action->idx);
             if(workspace) {
-                workspace_set_active(state, workspace);
+                workspace_set_active(state, workspace, false);
             }
             break;
         }

@@ -624,11 +624,18 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
         case TOPLEVEL_STATE_TILED: {
             layout_remove(toplevel);
             layout_add(workspace, toplevel);
+
+            // we need to only now update the workspace, so the transactions reference the real workspace
+            toplevel->workspace = workspace;
+
+            // configuring layouts now has all the information updated
             layout_configure(state, old_workspace);
             layout_configure(state, workspace);
             break;
         }
         case TOPLEVEL_STATE_FLOAT: {
+            toplevel->workspace = workspace;
+
             wl_list_remove(&toplevel->link);
             wl_list_insert(&workspace->floats, &toplevel->link);
 
@@ -646,6 +653,8 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
             break;
         }
         case TOPLEVEL_STATE_FULLSCREEN: {
+            toplevel->workspace = workspace;
+
             if(workspace->fullscreen) {
                 // remove the current one
                 toplevel_set_fullscreen(state, workspace->fullscreen, false);
@@ -656,8 +665,7 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
         }
     }
 
-    toplevel->workspace = workspace;
-    workspace_set_active(state, workspace);
+    workspace_set_active(state, workspace, true);
 }
 
 u32
@@ -811,26 +819,26 @@ toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_bo
 }
 
 // void
-// cursor_jump_focused_toplevel(void) {
-//   struct mwc_toplevel *toplevel = server.focused_toplevel;
-//   if(toplevel == NULL) return;
+// toplevel_warp_cursor(void) {
+//     struct mwc_toplevel *toplevel = server.focused_toplevel;
+//     if(toplevel == NULL)
+//         return;
 //
-//   struct wlr_box geo_box = toplevel_get_geometry(toplevel);
-//   wlr_cursor_warp(server.cursor, NULL,
-//                   toplevel->scene_tree->node.x + geo_box.x + toplevel->current.width / 2.0,
-//                   toplevel->scene_tree->node.y + geo_box.y + toplevel->current.height / 2.0);
+//     struct wlr_box geo_box = toplevel_get_geometry(toplevel);
+//     wlr_cursor_warp(server.cursor, NULL, toplevel->scene_tree->node.x + geo_box.x + toplevel->current.width / 2.0,
+//             toplevel->scene_tree->node.y + geo_box.y + toplevel->current.height / 2.0);
 //
-//   struct timespec now;
-//   clock_gettime(CLOCK_MONOTONIC, &now);
+//     struct timespec now;
+//     clock_gettime(CLOCK_MONOTONIC, &now);
 //
-//   pointer_handle_focus(now.tv_sec * 1000 + now.tv_nsec / 1000, false);
+//     pointer_handle_focus(now.tv_sec * 1000 + now.tv_nsec / 1000, false);
 // }
 // void
 // xdg_activation_handle_token_destroy(struct wl_listener *listener, void *data) {
-// 	struct mwc_token *token_data = wl_container_of(listener, token_data, destroy);
-// 	wl_list_remove(&token_data->destroy.link);
+//     struct mwc_token *token_data = wl_container_of(listener, token_data, destroy);
+//     wl_list_remove(&token_data->destroy.link);
 //
-// 	free(token_data);
+//     free(token_data);
 // }
 //
 // void

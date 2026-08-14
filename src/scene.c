@@ -16,10 +16,6 @@ scene_init(struct scene *scene, struct wlr_output_layout *output_layout) {
     scene->trees.grab = wlr_scene_tree_create(&scene->wlr_scene->tree);
     scene->trees.overlay = wlr_scene_tree_create(&scene->wlr_scene->tree);
     scene->trees.lock = wlr_scene_tree_create(&scene->wlr_scene->tree);
-
-    // TODO: just for testing, remove later
-    float color[4] = {255.0f, 255.0f, 255.0f, 255.0f};
-    wlr_scene_rect_create(scene->trees.background, 1920, 1080, color);
 }
 
 void

@@ -50,6 +50,8 @@ struct toplevel {
     struct wlr_scene_tree *snapshot_tree;
     bool is_ghost;
 
+    bool is_destroyed;
+
     struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel_handle;
 
     struct wl_listener map;

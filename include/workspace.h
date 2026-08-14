@@ -36,7 +36,7 @@ void
 workspace_destroy(struct state *state, struct workspace *workspace);
 
 void
-workspace_set_active(struct state *state, struct workspace *workspace);
+workspace_set_active(struct state *state, struct workspace *workspace, bool keep_focus);
 
 void
 workspace_show_toplevels(struct workspace *workspace, bool show);

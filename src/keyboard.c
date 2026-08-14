@@ -75,19 +75,19 @@ handle_change_vt(struct state *state, int count, const xkb_keysym_t *keysyms) {
 }
 
 static bool
-handle_keybinds(struct state *state, struct keyboard *keyboard, u32 keycode, int count, const u32 *syms,
-        enum wl_keyboard_key_state key_state) {
+handle_keybinds(struct state *state, struct keyboard *keyboard, u32 keycode, u32 layout_idx) {
     // for reference see notes on key consumption in the `xkbcommon.h` header
     u32 mods = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
-    u32 consumed_mods = xkb_state_key_get_consumed_mods(keyboard->wlr_keyboard->xkb_state, keycode);
     static const u32 significant_mods = WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_MOD2 |
                                         WLR_MODIFIER_MOD3 | WLR_MODIFIER_LOGO | WLR_MODIFIER_MOD5;
+
+    const u32 *syms;
+    int count = xkb_keymap_key_get_syms_by_level(keyboard->wlr_keyboard->keymap, keycode, layout_idx, 0, &syms);
 
     for(int i = 0; i < count; i++) {
         struct keybind *iter;
         wl_list_for_each(iter, &state->keybinds, link) {
-            if(syms[i] == iter->key && ((mods & ~consumed_mods & significant_mods) == iter->modifiers) &&
-                    key_state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+            if(syms[i] == iter->key && ((mods & significant_mods) == iter->modifiers)) {
                 wlr_log(WLR_ERROR, "action: %d", iter->type);
                 action_perform(state, iter->type, iter->action);
                 return true;
@@ -115,9 +115,11 @@ handle_key(struct wl_listener *listener, void *data) {
     int count = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
 
     bool handled = handle_change_vt(state, count, syms);
-    if(!handled) {
-        handled = handle_keybinds(state, keyboard, keycode, count, syms, event->state);
+    if(!handled && event->state != WL_KEYBOARD_KEY_STATE_RELEASED) {
+        u32 layout_idx = xkb_state_key_get_layout(keyboard->wlr_keyboard->xkb_state, keycode);
+        handled = handle_keybinds(state, keyboard, keycode, layout_idx);
     }
+
     if(!handled) {
         // pass to client
         wlr_seat_set_keyboard(state->seat.wlr_seat, keyboard->wlr_keyboard);

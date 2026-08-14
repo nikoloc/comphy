@@ -5,6 +5,8 @@
 #include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 
+#include "layer.h"
+#include "toplevel.h"
 #include "util/ints.h"
 
 struct cursor {
@@ -47,5 +49,11 @@ cursor_warp_focused_toplevel(struct state *state);
 
 void
 cursor_warp_output(struct state *state, struct output *output);
+
+void
+cursor_warp_toplevel(struct state *state, struct toplevel *toplevel);
+
+void
+cursor_warp_layer(struct state *state, struct layer *layer);
 
 #endif

@@ -267,3 +267,11 @@ layers_arrange(struct state *state, struct output *output) {
         layout_configure(state, iter);
     }
 }
+
+void
+layers_arrange_all(struct state *state) {
+    struct output *output;
+    wl_list_for_each(output, &state->outputs, link) {
+        layers_arrange(state, output);
+    }
+}

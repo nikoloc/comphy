@@ -123,20 +123,14 @@ workspace_show_toplevels(struct workspace *workspace, bool show) {
 }
 
 void
-workspace_set_active(struct state *state, struct workspace *workspace) {
+workspace_set_active(struct state *state, struct workspace *workspace, bool keep_focus) {
     if(state->active_workspace == workspace) {
         // do nothing
         return;
     }
 
-    // if it is an already active on its output, just switch to it
-    if(workspace == workspace->output->active_workspace) {
-        state->active_workspace = workspace;
-        output_focus(state, workspace->output);
-        return;
-    }
-
     state->pending_workspace = workspace;
+    state->keep_focus_on_workspace_change = keep_focus;
     transaction_schedule_commit(state, workspace);
 }
 
