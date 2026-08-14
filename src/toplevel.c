@@ -110,6 +110,17 @@ toplevel_update_state(struct toplevel *toplevel, enum toplevel_state state) {
     }
 }
 
+void
+toplevel_raise(struct toplevel *toplevel) {
+    ASSERT(toplevel->state == TOPLEVEL_STATE_FLOAT);
+
+    // keep it first
+    wl_list_remove(&toplevel->link);
+    wl_list_insert(&toplevel->workspace->floats, &toplevel->link);
+
+    wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+}
+
 static void
 handle_map(struct wl_listener *listener, void *data) {
     UNUSED(data);

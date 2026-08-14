@@ -149,6 +149,13 @@ handle_button(struct wl_listener *listener, void *data) {
     //     }
     // }
 
+    // raise if floating toplevel
+    enum view *view = seat_get_pointer_focused(state);
+    struct toplevel *toplevel = view_get_toplevel(view);
+    if(toplevel && toplevel->state == TOPLEVEL_STATE_FLOAT) {
+        toplevel_raise(toplevel);
+    }
+
     // TODO: recheck this logic
     if(event->state == WL_POINTER_BUTTON_STATE_RELEASED && state->operation) {
         operation_stop_whatever(state);

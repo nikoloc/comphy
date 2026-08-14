@@ -106,4 +106,7 @@ toplevel_send_frame_done(struct toplevel *toplevel);
 void
 toplevel_finalize_destroy(struct toplevel *toplevel);
 
+void
+toplevel_raise(struct toplevel *toplevel);
+
 #endif

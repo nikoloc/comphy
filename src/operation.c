@@ -29,6 +29,8 @@ operation_start_move(struct state *state, struct toplevel *toplevel, bool server
 
     // remove the toplevel and fix the layout
     if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
+        // raise before removing!
+        toplevel_raise(toplevel);
         wl_list_remove(&toplevel->link);
     } else {
         struct workspace *workspace = toplevel->workspace;
@@ -189,6 +191,10 @@ operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges
     if(server_inited) {
         // set the cursor image
         cursor_set_image(state, (char *)wlr_xcursor_get_resize_name(edges));
+    }
+
+    if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
+        toplevel_raise(toplevel);
     }
 }
 
