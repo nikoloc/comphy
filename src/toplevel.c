@@ -720,6 +720,22 @@ set_fullscreen(struct state *state, struct toplevel *toplevel) {
     struct workspace *workspace = toplevel->workspace;
     struct output *output = workspace->output;
 
+    switch(toplevel->state) {
+        case TOPLEVEL_STATE_TILED: {
+            layout_remove(toplevel);
+            layout_configure(state, workspace);
+            break;
+        }
+        case TOPLEVEL_STATE_FLOAT: {
+            wl_list_remove(&toplevel->link);
+            break;
+        }
+        case TOPLEVEL_STATE_FULLSCREEN: {
+            UNREACHABLE();
+            break;
+        }
+    }
+
     toplevel->prev_state = toplevel->state;
 
     workspace->fullscreen = toplevel;
@@ -743,9 +759,11 @@ unset_fullscreen(struct state *state, struct toplevel *toplevel) {
     wlr_xdg_toplevel_set_fullscreen(toplevel->wlr_toplevel, false);
     toplevel_update_state(toplevel, toplevel->prev_state);
     if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
+        wl_list_insert(&workspace->floats, &toplevel->link);
         int width, height;
         default_size(state, toplevel, &width, &height);
         toplevel_configure(state, toplevel, &(struct wlr_box){0});
+        toplevel->needs_centering = true;
     } else {
         layout_add(workspace, toplevel);
         layout_configure(state, workspace);
