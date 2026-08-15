@@ -210,7 +210,12 @@ static void
 remove_ghosts(struct workspace *workspace) {
     struct toplevel *iter, *tmp;
     wl_list_for_each_safe(iter, tmp, &workspace->ghosts, link) {
-        toplevel_finalize_destroy(iter);
+        if(iter->is_destroyed) {
+            toplevel_finalize_destroy(iter);
+        } else {
+            // else we wait for the destroy callback and unmark it as ghost in order for everything to cleanup
+            iter->is_ghost = false;
+        }
     }
 
     // reset the list

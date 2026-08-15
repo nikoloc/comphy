@@ -98,7 +98,7 @@ insert_layout_at_cursor(struct state *state, struct toplevel *toplevel) {
             workspace->master = toplevel;
         } else {
             // as slave
-            wl_list_insert(&workspace->slaves, &toplevel->link);
+            wl_list_insert(workspace->slaves.prev, &toplevel->link);
         }
 
         layout_configure(state, workspace);

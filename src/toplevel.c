@@ -402,7 +402,7 @@ toplevel_finalize_destroy(struct toplevel *toplevel) {
     // we need to manually destroy it since we manually created it. NOTE: this is also going to destroy the snapshot
     // tree if it exists
     wlr_scene_node_destroy(&toplevel->scene_tree->node);
-    free(toplevel);
+    FREE(toplevel);
 }
 
 static void
@@ -425,7 +425,8 @@ handle_destroy(struct wl_listener *listener, void *data) {
     wl_list_remove(&toplevel->set_title.link);
 
     if(toplevel->is_ghost) {
-        // dont destroy it fully, but keep the presentation and the pointer valid
+        // dont destroy it fully, but keep the presentation and the pointer valid and flag it
+        toplevel->is_destroyed = true;
         return;
     }
 
