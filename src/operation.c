@@ -240,12 +240,6 @@ operation_start_drag(struct state *state, struct wlr_drag *drag) {
 }
 
 void
-operation_stop_drag(struct state *state) {
-    // TODO:
-    UNUSED(state);
-}
-
-void
 operation_stop_whatever(struct state *state) {
     switch(state->operation) {
         case OPERATION_NONE: {
@@ -260,7 +254,6 @@ operation_stop_whatever(struct state *state) {
             break;
         }
         case OPERATION_DRAG: {
-            operation_stop_drag(state);
             break;
         }
     }

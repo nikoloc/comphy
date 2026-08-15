@@ -3,7 +3,6 @@
 void
 scene_init(struct scene *scene, struct wlr_output_layout *output_layout) {
     scene->wlr_scene = wlr_scene_create();
-    // TODO: fixme
     scene->scene_layout = wlr_scene_attach_output_layout(scene->wlr_scene, output_layout);
 
     // initialize them in the correct order

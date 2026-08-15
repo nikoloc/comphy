@@ -507,12 +507,6 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             decoration_update(&state->decoration, action->enable);
             break;
         }
-        case ACTION_TYPE_TOPLEVEL_RULE: {
-            struct toplevel_rule *rule = _action;
-
-            wl_list_insert(state->config.toplevel_rules.prev, &rule->link);
-            break;
-        }
         case ACTION_TYPE_POINTER_RULE: {
             struct pointer_rule *rule = _action;
 
@@ -522,6 +516,23 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             struct pointer *iter;
             wl_list_for_each(iter, &state->pointers, link) {
                 pointer_configure_from_rules(state, iter);
+            }
+            break;
+        }
+        case ACTION_TYPE_TOPLEVEL_RULE: {
+            struct toplevel_rule *rule = _action;
+
+            wl_list_insert(state->config.toplevel_rules.prev, &rule->link);
+            break;
+        }
+        case ACTION_TYPE_OUTPUT_RULE: {
+            struct output_rule *rule = _action;
+
+            wl_list_insert(state->config.output_rules.prev, &rule->link);
+
+            struct output *iter;
+            wl_list_for_each(iter, &state->outputs, link) {
+                output_configure_from_rules(state, iter);
             }
             break;
         }

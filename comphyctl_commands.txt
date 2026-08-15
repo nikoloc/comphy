@@ -33,5 +33,7 @@ pointer_rule [--name <name: string>] [--sensitivity <sensitivity: float>]
 toplevel_rule [--app_id <app_id: string>] [--title <title: string>]
     [--state <value: "float" "tiled"] [--width <value: int>]
     [--height <value: int>]
+output_rule [--name <name: string] [--x <value: int>] [--y <value: int>] [--width <value: int>]
+    [--height <value: int>] [--refresh_rate <value: int>] [--scale <value: float>]
 
 create_keybind [--even_when_locked] <modifiers: string> <key: string> <...action>

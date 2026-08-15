@@ -140,6 +140,11 @@ action_destroy(enum action_type type, void *_action) {
             _action = NULL;
             break;
         }
+        case ACTION_TYPE_OUTPUT_RULE: {
+            // long-lived rule struct managed separately
+            _action = NULL;
+            break;
+        }
     }
 
     FREE(_action);
@@ -791,8 +796,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         while(shell_parser_pop(parser, sizeof(word), word)) {
             if(strcmp(word, "--name") == 0) {
                 if(!shell_parser_pop(parser, sizeof(word), word)) {
-                    FREE(rule->match.name);
-                    FREE(rule);
+                    pointer_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
@@ -802,15 +806,13 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
                 rule->fields |= POINTER_RULE_FIELD_MATCH_NAME;
             } else if(strcmp(word, "--sensitivity") == 0) {
                 if(!shell_parser_pop(parser, sizeof(word), word)) {
-                    FREE(rule->match.name);
-                    FREE(rule);
+                    pointer_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
 
                 if(!parse_float(word, &rule->sensitivity) || rule->sensitivity > 1 || rule->sensitivity < -1) {
-                    FREE(rule->match.name);
-                    FREE(rule);
+                    pointer_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
@@ -818,15 +820,13 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
                 rule->fields |= POINTER_RULE_FIELD_SENSITIVITY;
             } else if(strcmp(word, "--acceleration") == 0) {
                 if(!shell_parser_pop(parser, sizeof(word), word)) {
-                    FREE(rule->match.name);
-                    FREE(rule);
+                    pointer_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
 
                 if(!parse_bool(word, &rule->acceleration)) {
-                    FREE(rule->match.name);
-                    FREE(rule);
+                    pointer_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
@@ -834,23 +834,20 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
                 rule->fields |= POINTER_RULE_FIELD_ACCELERATION;
             } else if(strcmp(word, "--left_handed") == 0) {
                 if(!shell_parser_pop(parser, sizeof(word), word)) {
-                    FREE(rule->match.name);
-                    FREE(rule);
+                    pointer_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
 
                 if(!parse_bool(word, &rule->left_handed)) {
-                    FREE(rule->match.name);
-                    FREE(rule);
+                    pointer_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
 
                 rule->fields |= POINTER_RULE_FIELD_LEFT_HANDED;
             } else {
-                FREE(rule->match.name);
-                FREE(rule);
+                pointer_rule_destroy(rule);
                 *dest = NULL;
                 return false;
             }
@@ -865,9 +862,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         while(shell_parser_pop(parser, sizeof(word), word)) {
             if(strcmp(word, "--app_id") == 0) {
                 if(!shell_parser_pop(parser, sizeof(word), word)) {
-                    FREE(rule->match.app_id);
-                    FREE(rule->match.title);
-                    FREE(rule);
+                    toplevel_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
@@ -877,9 +872,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
                 rule->fields |= TOPLEVEL_RULE_FIELD_MATCH_APP_ID;
             } else if(strcmp(word, "--title") == 0) {
                 if(!shell_parser_pop(parser, sizeof(word), word)) {
-                    FREE(rule->match.app_id);
-                    FREE(rule->match.title);
-                    FREE(rule);
+                    toplevel_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
@@ -889,59 +882,147 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
                 rule->fields |= TOPLEVEL_RULE_FIELD_MATCH_TITLE;
             } else if(strcmp(word, "--state") == 0) {
                 if(!shell_parser_pop(parser, sizeof(word), word)) {
-                    FREE(rule->match.app_id);
-                    FREE(rule->match.title);
-                    FREE(rule);
+                    toplevel_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
 
                 if(!parse_state(word, &rule->state)) {
-                    FREE(rule->match.app_id);
-                    FREE(rule->match.title);
-                    FREE(rule);
+                    toplevel_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
                 rule->fields |= TOPLEVEL_RULE_FIELD_STATE;
             } else if(strcmp(word, "--width") == 0) {
                 if(!shell_parser_pop(parser, sizeof(word), word)) {
-                    FREE(rule->match.app_id);
-                    FREE(rule->match.title);
-                    FREE(rule);
+                    toplevel_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
 
                 if(!parse_int(word, &rule->width)) {
-                    FREE(rule->match.app_id);
-                    FREE(rule->match.title);
-                    FREE(rule);
+                    toplevel_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
                 rule->fields |= TOPLEVEL_RULE_FIELD_WIDTH;
             } else if(strcmp(word, "--height") == 0) {
                 if(!shell_parser_pop(parser, sizeof(word), word)) {
-                    FREE(rule->match.app_id);
-                    FREE(rule->match.title);
-                    FREE(rule);
+                    toplevel_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
 
                 if(!parse_int(word, &rule->height)) {
-                    FREE(rule->match.app_id);
-                    FREE(rule->match.title);
-                    FREE(rule);
+                    toplevel_rule_destroy(rule);
                     *dest = NULL;
                     return false;
                 }
                 rule->fields |= TOPLEVEL_RULE_FIELD_HEIGHT;
             } else {
-                FREE(rule->match.app_id);
-                FREE(rule->match.title);
-                FREE(rule);
+                toplevel_rule_destroy(rule);
+                *dest = NULL;
+                return false;
+            }
+        }
+
+        return true;
+    } else if(strcmp(word, "output_rule") == 0) {
+        *out_type = ACTION_TYPE_OUTPUT_RULE;
+        struct output_rule *rule = ALLOC(struct output_rule);
+        *dest = rule;
+
+        while(shell_parser_pop(parser, sizeof(word), word)) {
+            if(strcmp(word, "--name") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                FREE(rule->match.name);
+                rule->match.name = strdup(word);
+                rule->fields |= OUTPUT_RULE_FIELD_MATCH_NAME;
+            } else if(strcmp(word, "--x") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_int(word, &rule->x)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+                rule->fields |= OUTPUT_RULE_FIELD_X;
+            } else if(strcmp(word, "--y") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_int(word, &rule->y)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+                rule->fields |= OUTPUT_RULE_FIELD_Y;
+            } else if(strcmp(word, "--width") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_int(word, &rule->width)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+                rule->fields |= OUTPUT_RULE_FIELD_WIDTH;
+            } else if(strcmp(word, "--height") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_int(word, &rule->height)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+                rule->fields |= OUTPUT_RULE_FIELD_HEIGHT;
+            } else if(strcmp(word, "--refresh_rate") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_int(word, &rule->refresh_rate)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+                rule->fields |= OUTPUT_RULE_FIELD_REFRESH_RATE;
+            } else if(strcmp(word, "--scale") == 0) {
+                if(!shell_parser_pop(parser, sizeof(word), word)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+
+                if(!parse_float(word, &rule->scale)) {
+                    output_rule_destroy(rule);
+                    *dest = NULL;
+                    return false;
+                }
+                rule->fields |= OUTPUT_RULE_FIELD_SCALE;
+            } else {
+                output_rule_destroy(rule);
                 *dest = NULL;
                 return false;
             }

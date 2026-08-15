@@ -13,7 +13,5 @@
 void
 keybind_destroy(struct keybind *keybind) {
     action_destroy(keybind->type, keybind->action);
-    wl_list_remove(&keybind->link);
-
     FREE(keybind);
 }

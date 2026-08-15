@@ -147,7 +147,7 @@ pointer_create(struct state *state, struct wlr_pointer *wlr_pointer) {
 }
 
 static bool
-matches_pointer_rule(const char *name, struct pointer_rule *rule) {
+matches_rule(const char *name, struct pointer_rule *rule) {
     if((rule->fields & POINTER_RULE_FIELD_MATCH_NAME) && rule->match.name && !strstr(name, rule->match.name)) {
         return false;
     }
@@ -159,7 +159,7 @@ static void
 create_config(struct state *state, const char *name, struct pointer_rule *config) {
     struct pointer_rule *iter;
     wl_list_for_each(iter, &state->config.pointer_rules, link) {
-        if(!matches_pointer_rule(name, iter)) {
+        if(!matches_rule(name, iter)) {
             continue;
         }
 

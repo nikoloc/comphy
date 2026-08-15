@@ -55,11 +55,39 @@ struct toplevel_rule {
     struct wl_list link;
 };
 
+enum output_rule_field {
+    OUTPUT_RULE_FIELD_MATCH_NAME = (1 << 0),
+
+    OUTPUT_RULE_FIELD_X = (1 << 1),
+    OUTPUT_RULE_FIELD_Y = (1 << 2),
+    OUTPUT_RULE_FIELD_WIDTH = (1 << 3),
+    OUTPUT_RULE_FIELD_HEIGHT = (1 << 4),
+    OUTPUT_RULE_FIELD_REFRESH_RATE = (1 << 5),
+    OUTPUT_RULE_FIELD_SCALE = (1 << 6),
+};
+
+struct output_rule {
+    u32 fields;
+
+    struct {
+        char *name;
+    } match;
+
+    int x, y, width, height;
+    int refresh_rate;
+    float scale;
+
+    struct wl_list link;
+};
+
 // similar note as for the `keybind_destroy()`
 void
 toplevel_rule_destroy(struct toplevel_rule *rule);
 
 void
 pointer_rule_destroy(struct pointer_rule *rule);
+
+void
+output_rule_destroy(struct output_rule *rule);
 
 #endif

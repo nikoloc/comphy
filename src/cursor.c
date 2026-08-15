@@ -156,11 +156,10 @@ handle_button(struct wl_listener *listener, void *data) {
         toplevel_raise(toplevel);
     }
 
-    // TODO: recheck this logic
     if(event->state == WL_POINTER_BUTTON_STATE_RELEASED && state->operation) {
         operation_stop_whatever(state);
     } else {
-        // else  notify the client with pointer focus that a button press has occurred
+        // else notify the client with pointer focus that a button press has occurred
         wlr_seat_pointer_notify_button(state->seat.wlr_seat, event->time_msec, event->button, event->state);
     }
 }

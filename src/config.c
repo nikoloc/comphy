@@ -35,6 +35,7 @@ config_init(struct config *config) {
 
     wl_list_init(&config->pointer_rules);
     wl_list_init(&config->toplevel_rules);
+    wl_list_init(&config->output_rules);
 
     config->master_ratio = 0.5f;
 }
@@ -59,6 +60,13 @@ config_deinit(struct config *config) {
         struct toplevel_rule *iter, *temp;
         wl_list_for_each_safe(iter, temp, &config->toplevel_rules, link) {
             toplevel_rule_destroy(iter);
+        }
+    }
+
+    {
+        struct output_rule *iter, *temp;
+        wl_list_for_each_safe(iter, temp, &config->output_rules, link) {
+            output_rule_destroy(iter);
         }
     }
 

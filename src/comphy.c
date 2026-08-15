@@ -40,7 +40,6 @@
 static void
 create_temp_dir(void) {
     mkdir(COMPHY_TEMP_DIR, 0777);
-    // TODO: do better
     unlink(COMPHYCTL_SOCKET);
 }
 
@@ -62,30 +61,25 @@ init_logs(bool debug) {
 
         wlr_log_init(WLR_DEBUG, NULL);
     } else {
-        wlr_log_init(WLR_DEBUG, NULL);
+        wlr_log_init(WLR_INFO, NULL);
     }
 }
 
 static bool
-get_init_script_path(string_t *dest) {
+get_init_script_path(char *dest, size_t size) {
     char *path = getenv("COMPHY_INIT_SCRIPT");
     if(path) {
-        string_init(dest, path);
-        return true;
+        return snprintf(dest, size, "%s", path) < (int)size;
     }
 
     char *dir = getenv("XDG_CONFIG_HOME");
     if(dir) {
-        string_init(dest, dir);
-        string_append_c_string(dest, "/comphy/init");
-        return true;
+        return snprintf(dest, size, "%s/comphy/init", dir) < (int)size;
     }
 
     dir = getenv("HOME");
     if(dir) {
-        string_init(dest, dir);
-        string_append_c_string(dest, "/.config/comphy/init");
-        return true;
+        return snprintf(dest, size, "%s/.config/comphy/init", dir) < (int)size;
     }
 
     return false;
@@ -95,23 +89,26 @@ static void
 exec_init_script(void *data) {
     UNUSED(data);
 
-    string_t init = {0};
-    if(get_init_script_path(&init)) {
-        wlr_log(WLR_INFO, "running init script '%s'", string_c_string_view(&init));
-        shell(string_c_string_view(&init));
-        string_deinit(&init);
+    char init[1024];
+    if(get_init_script_path(init, sizeof(init))) {
+        wlr_log(WLR_INFO, "running init script '%s'", init);
+        shell(init);
     } else {
         wlr_log(WLR_ERROR, "init script not found");
     }
 }
 
 int
-main(int argc, char *argv[]) {
-    UNUSED(argc), UNUSED(argv);
-
+main(int argc, char **argv) {
     create_temp_dir();
-    // TODO: fix hardcoded debug value
-    init_logs(false);
+
+    bool debug = false;
+    for(int i = 0; i < argc; i++) {
+        if(strcmp(argv[i], "--debug") == 0 || strcmp(argv[i], "-d") == 0) {
+            debug = true;
+        }
+    }
+    init_logs(debug);
 
     struct state *state = state_get();
     state->display = wl_display_create();

@@ -104,9 +104,3 @@ layout_reconfigure_all(struct state *state) {
         }
     }
 }
-
-struct toplevel *
-layout_toplevel_at(struct workspace *workspace, int x, int y) {
-    // TODO
-    return NULL;
-}

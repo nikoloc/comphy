@@ -17,7 +17,4 @@ layout_configure(struct state *state, struct workspace *workspace);
 void
 layout_reconfigure_all(struct state *state);
 
-struct toplevel *
-layout_toplevel_at(struct workspace *workspace, int x, int y);
-
 #endif

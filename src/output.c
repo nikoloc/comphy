@@ -12,9 +12,9 @@
 #include <wlr/util/log.h>
 
 #include "layer.h"
-#include "layout.h"
 #include "list_helpers.h"
 #include "pointer.h"
+#include "rules.h"
 #include "toplevel.h"
 #include "util/macros.h"
 #include "util/memory.h"
@@ -175,6 +175,55 @@ handle_destroy(struct wl_listener *listener, void *data) {
     free(output);
 }
 
+static bool
+matches_rule(const char *name, struct output_rule *rule) {
+    if((rule->fields & OUTPUT_RULE_FIELD_MATCH_NAME) && rule->match.name && !strstr(name, rule->match.name)) {
+        return false;
+    }
+
+    return true;
+}
+
+static void
+create_config(struct state *state, const char *name, struct output_rule *config) {
+    struct output_rule *iter;
+    wl_list_for_each(iter, &state->config.output_rules, link) {
+        if(!matches_rule(name, iter)) {
+            continue;
+        }
+
+        if(iter->fields & OUTPUT_RULE_FIELD_X) {
+            config->x = iter->x;
+        }
+        if(iter->fields & OUTPUT_RULE_FIELD_Y) {
+            config->y = iter->y;
+        }
+        if(iter->fields & OUTPUT_RULE_FIELD_WIDTH) {
+            config->width = iter->width;
+        }
+        if(iter->fields & OUTPUT_RULE_FIELD_HEIGHT) {
+            config->height = iter->height;
+        }
+        if(iter->fields & OUTPUT_RULE_FIELD_REFRESH_RATE) {
+            config->refresh_rate = iter->refresh_rate;
+        }
+        if(iter->fields & OUTPUT_RULE_FIELD_SCALE) {
+            config->scale = iter->scale;
+        }
+    }
+}
+
+void
+output_configure_from_rules(struct state *state, struct output *output) {
+    struct output_rule config = {0};
+    create_config(state, output->wlr_output->name, &config);
+
+    modeset(output, config.width, config.height, config.refresh_rate, config.scale);
+    output->output_layout_output = wlr_output_layout_add(state->output_layout, output->wlr_output, config.x, config.y);
+
+    update_area(output);
+}
+
 struct output *
 output_create(struct state *state, struct wlr_output *wlr_output) {
     struct output *output = ALLOC(struct output);
@@ -184,18 +233,9 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
     wlr_log(WLR_DEBUG, "new output '%s'", output->wlr_output->name);
 
     wlr_output_init_render(wlr_output, state->backend.allocator, state->backend.renderer);
-
-    // TODO: not needed anymore?
-    // struct output_config config = {0};
-    // output_configure(state, output, &config);
-
-    // TODO: fix
-    modeset(output, 0, 0, 0, 1.0f);
-
     output->scene_output = wlr_scene_output_create(state->scene.wlr_scene, wlr_output);
-    output->output_layout_output = wlr_output_layout_add_auto(state->output_layout, output->wlr_output);
 
-    update_area(output);
+    output_configure_from_rules(state, output);
 
     // TODO: when locking
     // output->lock_rect = wlr_scene_rect_create(&state->scene.wlr_scene->tree, 0, 0, (float[4]){0.0f, 0.0f,
@@ -225,23 +265,6 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
     wl_signal_add(&wlr_output->events.request_state, &output->request_state);
 
     return output;
-}
-
-void
-output_configure(struct state *state, struct output *output, struct output_config *config) {
-    modeset(output, config->width, config->height, config->refresh, config->scale);
-
-    // TODO: modesetting
-    output->output_layout_output = wlr_output_layout_add(state->output_layout, output->wlr_output, 0, 0);
-
-    output->full_area = (struct wlr_box){
-            output->output_layout_output->x,
-            output->output_layout_output->y,
-            output->wlr_output->width,
-            output->wlr_output->height,
-    };
-
-    output->usable_area = output->full_area;
 }
 
 void

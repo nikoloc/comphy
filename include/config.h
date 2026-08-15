@@ -21,6 +21,7 @@ struct config {
 
     struct wl_list pointer_rules;
     struct wl_list toplevel_rules;
+    struct wl_list output_rules;
 
     struct {
         bool dwt;

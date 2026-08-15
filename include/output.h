@@ -5,13 +5,6 @@
 
 #include "state.h"
 
-struct output_config {
-    int x, y;
-    int width, height, refresh;
-
-    float scale;
-};
-
 struct output {
     struct wlr_output *wlr_output;
     struct wlr_scene_output *scene_output;
@@ -45,7 +38,7 @@ struct output *
 output_create(struct state *state, struct wlr_output *wlr_output);
 
 void
-output_configure(struct state *state, struct output *output, struct output_config *config);
+output_configure_from_rules(struct state *state, struct output *output);
 
 // give focus to some view on this workspace in the general focus order; does not handle workspace switching!
 void
@@ -62,7 +55,5 @@ output_find_by_name(struct state *state, char *name);
 //
 // struct workspace *
 // output_find_owned_workspace(struct state *state, struct output *output);
-
-// take better functions from comphy-old
 
 #endif

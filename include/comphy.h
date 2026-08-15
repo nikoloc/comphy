@@ -1,8 +1,6 @@
 #ifndef COMPHY_H
 #define COMPHY_H
 
-// here we define the desired versions of interfaces
-
 #ifndef COMPHY_TEMP_DIR
 #define COMPHY_TEMP_DIR "/tmp/comphy"
 #endif
@@ -36,7 +34,11 @@
 #endif
 
 #ifndef COMPHY_TRANSACTION_TIME_OUT_MS
+#ifdef DEBUG
 #define COMPHY_TRANSACTION_TIME_OUT_MS (1000)
+#else
+#define COMPHY_TRANSACTION_TIME_OUT_MS (200)
+#endif
 #endif
 
 #endif

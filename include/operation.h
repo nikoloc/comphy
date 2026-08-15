@@ -29,9 +29,6 @@ void
 operation_start_drag(struct state *state, struct wlr_drag *drag);
 
 void
-operation_stop_drag(struct state *state);
-
-void
 operation_stop_whatever(struct state *state);
 
 void

@@ -4,8 +4,6 @@
 
 void
 toplevel_rule_destroy(struct toplevel_rule *rule) {
-    wl_list_remove(&rule->link);
-
     FREE(rule->match.app_id);
     FREE(rule->match.title);
     FREE(rule);
@@ -13,8 +11,12 @@ toplevel_rule_destroy(struct toplevel_rule *rule) {
 
 void
 pointer_rule_destroy(struct pointer_rule *rule) {
-    wl_list_remove(&rule->link);
+    FREE(rule->match.name);
+    FREE(rule);
+}
 
+void
+output_rule_destroy(struct output_rule *rule) {
     FREE(rule->match.name);
     FREE(rule);
 }
