@@ -14,7 +14,7 @@
 
 void
 operation_start_move(struct state *state, struct toplevel *toplevel, bool server_inited) {
-    if(state->operation) {
+    if(state->operation || toplevel->state == TOPLEVEL_STATE_FULLSCREEN) {
         // if there is some operation already skip it
         return;
     }
@@ -29,8 +29,6 @@ operation_start_move(struct state *state, struct toplevel *toplevel, bool server
 
     // remove the toplevel and fix the layout
     if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
-        // raise before removing!
-        toplevel_raise(toplevel);
         wl_list_remove(&toplevel->link);
     } else {
         struct workspace *workspace = toplevel->workspace;
@@ -52,6 +50,7 @@ operation_start_move(struct state *state, struct toplevel *toplevel, bool server
 
     // move this toplevel to the grab tree
     toplevel->needs_reparenting = true;
+    transaction_schedule_commit(state, toplevel->workspace);
 
     state->operation_server_inited = server_inited;
     if(server_inited) {
@@ -132,6 +131,9 @@ insert_layout_at_cursor(struct state *state, struct toplevel *toplevel) {
 
 static void
 stop_shared(struct state *state) {
+    // for reparenting back
+    transaction_schedule_commit(state, state->grabbed_toplevel->workspace);
+
     state->operation = OPERATION_NONE;
     state->grabbed_toplevel = NULL;
 
@@ -176,7 +178,7 @@ operation_stop_move(struct state *state) {
 
 void
 operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges, bool server_inited) {
-    if(state->grabbed_toplevel || toplevel->state != TOPLEVEL_STATE_FLOAT) {
+    if(state->operation || toplevel->state != TOPLEVEL_STATE_FLOAT) {
         return;
     }
 
@@ -187,15 +189,17 @@ operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges
     state->grabbed_toplevel_initial_box = toplevel->current;
     state->resize_edges = edges;
 
+    wl_list_remove(&toplevel->link);
+
     state->operation_server_inited = server_inited;
     if(server_inited) {
         // set the cursor image
         cursor_set_image(state, (char *)wlr_xcursor_get_resize_name(edges));
     }
 
-    if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
-        toplevel_raise(toplevel);
-    }
+    // move this toplevel to the grab tree
+    toplevel->needs_reparenting = true;
+    transaction_schedule_commit(state, toplevel->workspace);
 }
 
 void
@@ -203,11 +207,8 @@ operation_stop_resize(struct state *state) {
     struct toplevel *toplevel = state->grabbed_toplevel;
     struct output *largest_output = toplevel_float_largest_output_intersection(state, toplevel);
 
-    if(largest_output != toplevel->workspace->output) {
-        toplevel->workspace = largest_output->active_workspace;
-        wl_list_remove(&toplevel->link);
-        wl_list_insert(&largest_output->active_workspace->floats, &toplevel->link);
-    }
+    toplevel->workspace = largest_output->active_workspace;
+    wl_list_insert(&largest_output->active_workspace->floats, &toplevel->link);
 
     toplevel->needs_reparenting = true;
     stop_shared(state);

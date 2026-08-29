@@ -74,9 +74,13 @@ scene_tree_snapshot(struct wlr_scene_tree *tree) {
 static bool
 all_ready(struct state *state, struct workspace *workspace) {
     struct wlr_box dummy;
-    if(state->operation == OPERATION_MOVE && state->grabbed_toplevel &&
+    if(state->grabbed_toplevel &&
             wlr_box_intersection(&dummy, &state->grabbed_toplevel->pending, &workspace->output->full_area) &&
             state->grabbed_toplevel->transaction_state == TRANSACTION_STATE_DIRTY) {
+        return false;
+    }
+
+    if(workspace->fullscreen && workspace->fullscreen->transaction_state == TRANSACTION_STATE_DIRTY) {
         return false;
     }
 
@@ -112,6 +116,7 @@ reparent(struct state *state, struct toplevel *toplevel) {
             }
             case TOPLEVEL_STATE_FLOAT: {
                 wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.floats);
+                toplevel_handle_parents_and_children(toplevel);
                 break;
             }
             case TOPLEVEL_STATE_FULLSCREEN: {
@@ -175,13 +180,12 @@ commit(struct state *state, struct toplevel *toplevel) {
         // this means the client timed out and its pending stuff is all zeros, we patch it with current
         struct wlr_box output_box = toplevel->workspace->output->usable_area;
         toplevel->current = wlr_box_centered_in(&output_box, toplevel->current.width, toplevel->current.height);
-
         toplevel->needs_centering = false;
     } else {
         toplevel->current = toplevel->pending;
     }
 
-    clip(state, toplevel);
+    // clip(state, toplevel);
 
     if(toplevel->needs_reparenting) {
         reparent(state, toplevel);
@@ -223,42 +227,28 @@ remove_ghosts(struct workspace *workspace) {
 }
 
 static void
-finalize_active(struct state *state) {
-    struct workspace *workspace = state->pending_workspace;
-    struct workspace *old_workspace = state->active_workspace;
+show_workspace(struct state *state) {
+    struct workspace *workspace = state->active_workspace;
+    struct workspace *presented = state->active_workspace->output->presented_workspace;
 
-    state->active_workspace = workspace;
-    state->pending_workspace = NULL;
+    state->active_workspace->output->presented_workspace = workspace;
 
-    // if it is an already active on its output, just switch to it
-    if(workspace == workspace->output->active_workspace) {
-        state->active_workspace = workspace;
-        if(!state->keep_focus_on_workspace_change) {
-            output_focus(state, workspace->output);
-        }
-
-        return;
+    if(presented) {
+        workspace_show_toplevels(presented, false);
     }
-
-    workspace->output->active_workspace = workspace;
-
-    workspace_show_toplevels(old_workspace, false);
     workspace_show_toplevels(workspace, true);
-
-    state->active_workspace = workspace;
-    workspace->output->active_workspace = workspace;
-
-    if(!state->keep_focus_on_workspace_change) {
-        output_focus(state, workspace->output);
-    }
 }
 
 static void
 commit_all(struct state *state, struct workspace *workspace) {
     struct wlr_box dummy;
-    if(state->operation == OPERATION_MOVE &&
+    if(state->grabbed_toplevel &&
             wlr_box_intersection(&dummy, &state->grabbed_toplevel->pending, &workspace->output->full_area)) {
         commit(state, state->grabbed_toplevel);
+    }
+
+    if(workspace->fullscreen) {
+        commit(state, workspace->fullscreen);
     }
 
     if(workspace->master) {
@@ -277,8 +267,16 @@ commit_all(struct state *state, struct workspace *workspace) {
     remove_ghosts(workspace);
     workspace->has_dirty = false;
 
-    if(workspace == state->pending_workspace) {
-        finalize_active(state);
+    if(workspace == state->active_workspace && workspace != state->active_workspace->output->presented_workspace) {
+        show_workspace(state);
+    }
+
+    if(state->warp_on_transaction && state->warp_on_transaction->workspace == workspace) {
+        if(workspace == state->active_workspace) {
+            cursor_warp_toplevel(state, state->warp_on_transaction);
+        }
+
+        state->warp_on_transaction = NULL;
     }
 }
 
@@ -306,17 +304,6 @@ transaction_commit(struct state *state, struct toplevel *toplevel) {
     toplevel->transaction_state = TRANSACTION_STATE_READY;
 
     struct workspace *workspace = toplevel->workspace;
-    if(toplevel->state == TOPLEVEL_STATE_FULLSCREEN) {
-        // dont need anything else
-        commit(state, toplevel);
-        remove_time_out(workspace);
-
-        if(workspace == state->pending_workspace) {
-            finalize_active(state);
-        }
-        return;
-    }
-
     if(!all_ready(state, workspace)) {
         wlr_log(WLR_DEBUG, "transaction for workspace '%d' not ready yet", workspace->idx);
         // transaction not ready

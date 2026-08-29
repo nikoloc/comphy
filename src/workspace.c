@@ -1,7 +1,6 @@
 #include "workspace.h"
 
 #include <assert.h>
-#include <stdlib.h>
 #include <wlr/util/log.h>
 
 #include "list_helpers.h"
@@ -129,8 +128,16 @@ workspace_set_active(struct state *state, struct workspace *workspace, bool keep
         return;
     }
 
-    state->pending_workspace = workspace;
-    state->keep_focus_on_workspace_change = keep_focus;
+    struct output *old_output = state->active_workspace->output;
+
+    state->active_workspace = workspace;
+    workspace->output->active_workspace = workspace;
+
+    if(!keep_focus) {
+        output_focus(state, workspace->output, workspace->output != old_output);
+    }
+
+    // commit on the transaction, tho we need to schedule one is the workspace is clean
     transaction_schedule_commit(state, workspace);
 }
 

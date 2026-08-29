@@ -131,6 +131,26 @@ handle_request_state(struct wl_listener *listener, void *data) {
 }
 
 static void
+destroy_layers(struct output *output) {
+    struct layer *iter, *tmp;
+    wl_list_for_each_safe(iter, tmp, &output->layers.overlay, link) {
+        layer_destroy(iter);
+    }
+
+    wl_list_for_each_safe(iter, tmp, &output->layers.top, link) {
+        layer_destroy(iter);
+    }
+
+    wl_list_for_each_safe(iter, tmp, &output->layers.bottom, link) {
+        layer_destroy(iter);
+    }
+
+    wl_list_for_each_safe(iter, tmp, &output->layers.background, link) {
+        layer_destroy(iter);
+    }
+}
+
+static void
 handle_destroy(struct wl_listener *listener, void *data) {
     UNUSED(data);
 
@@ -139,30 +159,29 @@ handle_destroy(struct wl_listener *listener, void *data) {
 
     wlr_log(WLR_DEBUG, "destroying output '%s'", output->wlr_output->name);
 
-    if(!state->is_exiting) {
-        struct wl_list *next = wl_list_next_or_prev(&state->outputs, &output->link);
-        if(next) {
-            struct output *next_output = CONTAINER_OF(next, struct output, link);
-            // TODO: orphans
-            // struct workspace *w, *tmp;
-            // wl_list_for_each_safe(w, tmp, &output->workspaces, link) {
-            //     w->output = new;
-            //     wl_list_remove(&w->link);
-            //     wl_list_insert(&new->workspaces, &w->link);
-            //     layout_set_pending_state(w);
-            // }
+    struct wl_list *next = wl_list_next_or_prev(&state->outputs, &output->link);
+    if(next) {
+        struct output *next_output = CONTAINER_OF(next, struct output, link);
+        // TODO: orphans
+        // struct workspace *w, *tmp;
+        // wl_list_for_each_safe(w, tmp, &output->workspaces, link) {
+        //     w->output = new;
+        //     wl_list_remove(&w->link);
+        //     wl_list_insert(&new->workspaces, &w->link);
+        //     layout_set_pending_state(w);
+        // }
 
-            enum view *view = view_get_focused(state);
-            if(view) {
-                // TODO: check if the layers and lock surfaces are destroyed before hand
-                struct output *focused_output = view_get_output(view);
-                if(focused_output == output) {
-                    // if the focus is on this output move it elsewhere
-                    output_focus(state, next_output);
-                }
+        enum view *view = view_get_focused(state);
+        if(view) {
+            struct output *focused_output = view_get_output(view);
+            if(focused_output == output) {
+                // if the focus is on this output move it elsewhere
+                output_focus(state, next_output, true);
             }
         }
     }
+
+    destroy_layers(output);
 
     if(output->lock_rect) {
         wlr_scene_node_destroy(&output->lock_rect->node);
@@ -268,21 +287,20 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
 }
 
 void
-output_focus(struct state *state, struct output *output) {
+output_focus(struct state *state, struct output *output, bool warp) {
     // go from the top most tree and find the view that accepts keyboard focus
     {
         struct layer *iter;
         wl_list_for_each(iter, &output->layers.overlay, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
-                cursor_warp_layer(state, iter);
+                layer_focus(state, iter, warp);
+                cursor_warp_output(state, output);
                 return;
             }
         }
         wl_list_for_each(iter, &output->layers.top, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
-                cursor_warp_layer(state, iter);
+                layer_focus(state, iter, warp);
                 return;
             }
         }
@@ -290,22 +308,19 @@ output_focus(struct state *state, struct output *output) {
 
     struct workspace *workspace = output->active_workspace;
     if(workspace->fullscreen) {
-        toplevel_focus(state, workspace->fullscreen);
-        cursor_warp_toplevel(state, workspace->fullscreen);
+        toplevel_focus(state, workspace->fullscreen, warp);
         return;
     }
 
     struct wl_list *top_most = wl_list_first(&workspace->floats);
     if(top_most) {
         struct toplevel *toplevel = CONTAINER_OF(top_most, struct toplevel, link);
-        toplevel_focus(state, toplevel);
-        cursor_warp_toplevel(state, toplevel);
+        toplevel_focus(state, toplevel, warp);
         return;
     }
 
     if(workspace->master) {
-        toplevel_focus(state, workspace->master);
-        cursor_warp_toplevel(state, workspace->master);
+        toplevel_focus(state, workspace->master, warp);
         return;
     }
 
@@ -314,18 +329,20 @@ output_focus(struct state *state, struct output *output) {
         struct layer *iter;
         wl_list_for_each(iter, &output->layers.bottom, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
-                cursor_warp_layer(state, iter);
+                layer_focus(state, iter, warp);
                 return;
             }
         }
         wl_list_for_each(iter, &output->layers.background, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
-                cursor_warp_layer(state, iter);
+                layer_focus(state, iter, warp);
                 return;
             }
         }
+    }
+
+    if(warp && state->config.cursor.warp) {
+        cursor_warp_output(state, output);
     }
 }
 

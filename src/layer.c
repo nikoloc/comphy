@@ -4,6 +4,7 @@
 #include <wayland-util.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/util/log.h>
 
 #include "config.h"
 #include "layout.h"
@@ -97,6 +98,8 @@ handle_map(struct wl_listener *listener, void *data) {
     struct layer *layer = CONTAINER_OF(listener, struct layer, map);
     struct state *state = state_get();
 
+    wlr_log(WLR_DEBUG, "layer '%p' mapped", (void *)layer);
+
     struct output *output = layer->wlr_layer->output->data;
 
     // insert it into a list
@@ -106,7 +109,7 @@ handle_map(struct wl_listener *listener, void *data) {
 
     wlr_scene_node_raise_to_top(&layer->scene_tree->tree->node);
     layers_arrange(state, output);
-    layer_focus(state, layer);
+    layer_focus(state, layer, true);
 }
 
 static void
@@ -115,6 +118,8 @@ handle_unmap(struct wl_listener *listener, void *data) {
 
     struct layer *layer = CONTAINER_OF(listener, struct layer, unmap);
     struct state *state = state_get();
+
+    wlr_log(WLR_DEBUG, "layer '%p' unmapped", (void *)layer);
 
     wl_list_remove(&layer->link);
 
@@ -132,7 +137,7 @@ handle_unmap(struct wl_listener *listener, void *data) {
     if(layer == state->focused_layer) {
         state->is_exclusive = false;
 
-        output_focus(state, output);
+        output_focus(state, output, true);
     }
 
     layers_arrange(state, output);
@@ -143,6 +148,8 @@ handle_destroy(struct wl_listener *listener, void *data) {
     UNUSED(data);
 
     struct layer *layer = CONTAINER_OF(listener, struct layer, destroy);
+
+    wlr_log(WLR_DEBUG, "layer '%p' destroyed", (void *)layer);
 
     wl_list_remove(&layer->map.link);
     wl_list_remove(&layer->unmap.link);
@@ -158,12 +165,28 @@ handle_new_popup(struct wl_listener *listener, void *data) {
     struct layer *layer = CONTAINER_OF(listener, struct layer, new_popup);
     struct wlr_xdg_popup *xdg_popup = data;
 
+    wlr_log(WLR_DEBUG, "new layer popup for layer '%p'", (void *)layer);
+
     struct popup *popup = xdg_popup->base->data;
 
     struct wlr_scene_tree *parent_tree = layer->scene_tree->tree;
     popup->scene_tree = wlr_scene_xdg_surface_create(parent_tree, xdg_popup->base);
 
     popup->scene_tree->node.data = &popup->view;
+}
+
+void
+layer_destroy(struct layer *layer) {
+    wl_list_remove(&layer->map.link);
+    wl_list_remove(&layer->unmap.link);
+    wl_list_remove(&layer->commit.link);
+    wl_list_remove(&layer->new_popup.link);
+    wl_list_remove(&layer->destroy.link);
+
+    wl_list_remove(&layer->link);
+
+    wlr_layer_surface_v1_destroy(layer->wlr_layer);
+    FREE(layer);
 }
 
 struct layer *
@@ -207,7 +230,7 @@ layer_create(struct state *state, struct wlr_layer_surface_v1 *wlr_layer) {
 }
 
 void
-layer_focus(struct state *state, struct layer *layer) {
+layer_focus(struct state *state, struct layer *layer, bool warp) {
     if(state->lock_mgr.lock) {
         return;
     }
@@ -229,6 +252,10 @@ layer_focus(struct state *state, struct layer *layer) {
     if(keyboard) {
         wlr_seat_keyboard_notify_enter(state->seat.wlr_seat, layer->wlr_layer->surface, keyboard->keycodes,
                 keyboard->num_keycodes, &keyboard->modifiers);
+    }
+
+    if(warp && state->config.cursor.warp) {
+        cursor_warp_layer(state, layer);
     }
 }
 

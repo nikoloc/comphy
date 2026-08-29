@@ -48,6 +48,7 @@ struct toplevel {
     struct wlr_scene_rect *border;
 
     struct wlr_scene_tree *snapshot_tree;
+
     bool is_ghost;
     bool is_destroyed;
 
@@ -73,13 +74,10 @@ struct toplevel *
 toplevel_create(struct state *state, struct wlr_xdg_toplevel *wlr_toplevel);
 
 void
-toplevel_focus(struct state *state, struct toplevel *toplevel);
+toplevel_focus(struct state *state, struct toplevel *toplevel, bool warp);
 
 void
 toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_box *box);
-
-void
-toplevel_set_fullscreen(struct state *state, struct toplevel *toplevel, bool set);
 
 struct output *
 toplevel_float_largest_output_intersection(struct state *state, struct toplevel *toplevel);
@@ -93,11 +91,8 @@ toplevel_get_corner_closest_to(struct toplevel *toplevel, int x, int y);
 void
 toplevel_set_border_color(struct toplevel *toplevel, color_t color);
 
-// this function does not consider the layout, lists, positioning etc and is meant to be called once all of
-// that has been done by wahtever logic was needed in that scenario. this function does some final adjustements
-// for the transaction system and sends the 'hacks' to the toplevel based on state
 void
-toplevel_update_state(struct toplevel *toplevel, enum toplevel_state state);
+toplevel_set_state(struct state *state, struct toplevel *toplevel, enum toplevel_state new_state);
 
 void
 toplevel_send_frame_done(struct toplevel *toplevel);
@@ -107,5 +102,8 @@ toplevel_finalize_destroy(struct toplevel *toplevel);
 
 void
 toplevel_raise(struct toplevel *toplevel);
+
+void
+toplevel_handle_parents_and_children(struct toplevel *toplevel);
 
 #endif

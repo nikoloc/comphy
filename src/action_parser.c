@@ -164,23 +164,6 @@ parse_state(const char *str, enum toplevel_state *state) {
 }
 
 static bool
-parse_cursor_warp(const char *str, enum cursor_warp *warp) {
-    if(strcmp(str, "none") == 0) {
-        *warp = CURSOR_WARP_NONE;
-        return true;
-    }
-    if(strcmp(str, "on_focus_change") == 0) {
-        *warp = CURSOR_WARP_ON_FOCUS_CHANGE;
-        return true;
-    }
-    if(strcmp(str, "on_output_change") == 0) {
-        *warp = CURSOR_WARP_ON_OUTPUT_CHANGE;
-        return true;
-    }
-    return false;
-}
-
-static bool
 parse_direction(const char *str, enum wlr_direction *dir) {
     if(strcmp(str, "up") == 0) {
         *dir = WLR_DIRECTION_UP;
@@ -630,7 +613,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
-        if(!parse_cursor_warp(word, &action->value)) {
+        if(!parse_bool(word, &action->enable)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;

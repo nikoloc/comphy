@@ -127,21 +127,21 @@ view_at(struct state *state, double lx, double ly, struct wlr_surface **surface,
 }
 
 void
-view_focus(struct state *state, enum view *view) {
+view_focus(struct state *state, enum view *view, bool warp) {
     switch(*view) {
         case VIEW_TOPLEVEL: {
             struct toplevel *toplevel = CONTAINER_OF(view, struct toplevel, view);
-            toplevel_focus(state, toplevel);
+            toplevel_focus(state, toplevel, warp);
             break;
         }
         case VIEW_POPUP: {
             struct popup *popup = CONTAINER_OF(view, struct popup, view);
-            view_focus(state, popup_get_root_parent(popup));
+            view_focus(state, popup_get_root_parent(popup), warp);
             break;
         }
         case VIEW_LAYER: {
             struct layer *layer = CONTAINER_OF(view, struct layer, view);
-            // layer_focus(state, layer);
+            layer_focus(state, layer, warp);
             break;
         }
         case VIEW_LOCK_SURFACE: {

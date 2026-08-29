@@ -78,7 +78,7 @@ ctl_init(struct ctl *ctl, struct wl_display *display) {
     }
 
     if(listen(ctl->fd, 128) < 0) {
-        wlr_log(WLR_ERROR, "ipc: failed to listen on socket: %s", strerror(errno));
+        wlr_log(WLR_ERROR, "failed to listen on socket: %s", strerror(errno));
         close(ctl->fd);
         unlink(COMPHYCTL_SOCKET);
         return;

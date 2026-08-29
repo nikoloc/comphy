@@ -24,6 +24,21 @@
 #include "util/time_util.h"
 #include "workspace.h"
 
+static void
+set_hacks(struct toplevel *toplevel) {
+    // in order for the clients to react better to our demands in tiled mode, we tell it that its maximized and
+    // tiled on all sides. this makes the client not draw stuff such as rounded corners, shadows and usually
+    // means the client will respect our desired size more than if not
+    wlr_xdg_toplevel_set_maximized(toplevel->wlr_toplevel, true);
+    wlr_xdg_toplevel_set_tiled(toplevel->wlr_toplevel, WLR_EDGE_TOP | WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT);
+}
+
+static void
+reset_hacks(struct toplevel *toplevel) {
+    wlr_xdg_toplevel_set_maximized(toplevel->wlr_toplevel, false);
+    wlr_xdg_toplevel_set_tiled(toplevel->wlr_toplevel, WLR_EDGE_NONE);
+}
+
 static bool
 matches_rule(struct toplevel *toplevel, struct toplevel_rule *rule) {
     if((rule->fields & TOPLEVEL_RULE_FIELD_MATCH_APP_ID) &&
@@ -81,6 +96,14 @@ default_size(struct state *state, struct toplevel *toplevel, int *width, int *he
     }
 }
 
+static bool
+should_have_border(struct state *state, struct toplevel *toplevel) {
+    bool smart_gaps = state->config.gaps.smart && toplevel == toplevel->workspace->master &&
+                      wl_list_empty(&toplevel->workspace->slaves);
+
+    return toplevel->state != TOPLEVEL_STATE_FULLSCREEN && !smart_gaps;
+}
+
 static void
 center_float(struct toplevel *toplevel) {
     ASSERT(toplevel->state == TOPLEVEL_STATE_FLOAT);
@@ -92,22 +115,41 @@ center_float(struct toplevel *toplevel) {
     toplevel->needs_centering = false;
 }
 
-void
-toplevel_update_state(struct toplevel *toplevel, enum toplevel_state state) {
-    toplevel->state = state;
-    toplevel->needs_reparenting = true;
-
-    // in order for the clients to react better to our demands in tiled mode, we tell it that its maximized and
-    // tiled on all sides. this makes the client not draw stuff such as rounded corners, shadows and usually
-    // means the client will respect our desired size more than if not
-    wlr_xdg_toplevel_set_maximized(toplevel->wlr_toplevel, toplevel->state == TOPLEVEL_STATE_TILED);
-
-    if(toplevel->state == TOPLEVEL_STATE_TILED) {
-        wlr_xdg_toplevel_set_tiled(toplevel->wlr_toplevel,
-                WLR_EDGE_TOP | WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT);
-    } else {
-        wlr_xdg_toplevel_set_tiled(toplevel->wlr_toplevel, WLR_EDGE_NONE);
+static void
+raise_children_above(struct toplevel *toplevel) {
+    struct toplevel *iter;
+    wl_list_for_each(iter, &toplevel->workspace->floats, link) {
+        if(iter->wlr_toplevel->parent == toplevel->wlr_toplevel) {
+            // if its a child of this toplevel we raise it above this one, which will recursively raise all of its
+            // children above itself
+            wlr_scene_node_place_above(&iter->scene_tree->node, &toplevel->scene_tree->node);
+            raise_children_above(iter);
+        }
     }
+}
+
+static void
+raise_parent_just_bellow_if_any(struct toplevel *toplevel) {
+    if(toplevel->wlr_toplevel->parent == NULL) {
+        return;
+    }
+
+    struct toplevel *parent = toplevel->wlr_toplevel->parent->base->data;
+    if(parent->state == TOPLEVEL_STATE_FLOAT) {
+        // we raise this one and its parent (if any)
+        wlr_scene_node_place_below(&parent->scene_tree->node, &toplevel->scene_tree->node);
+        raise_parent_just_bellow_if_any(parent);
+    }
+}
+
+void
+toplevel_handle_parents_and_children(struct toplevel *toplevel) {
+    ASSERT(toplevel->state == TOPLEVEL_STATE_FLOAT);
+
+    // if floating we raise its parent (and parents parent and so on)
+    raise_parent_just_bellow_if_any(toplevel);
+    // and also raise its children above this one
+    raise_children_above(toplevel);
 }
 
 void
@@ -119,6 +161,7 @@ toplevel_raise(struct toplevel *toplevel) {
     wl_list_insert(&toplevel->workspace->floats, &toplevel->link);
 
     wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+    toplevel_handle_parents_and_children(toplevel);
 }
 
 static void
@@ -145,10 +188,6 @@ handle_map(struct wl_listener *listener, void *data) {
     color_to_wlr_color(state->config.border.color.inactive, color);
     toplevel->border = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, color);
     wlr_scene_node_lower_to_bottom(&toplevel->border->node);
-
-    // in order to obtain this toplevel we keep a pointer to view, from which the type of view can be read, and then
-    // extracted by using `CONTAINER_OF()`
-    toplevel->scene_tree->node.data = &toplevel->view;
 
     switch(toplevel->state) {
         case TOPLEVEL_STATE_TILED: {
@@ -185,40 +224,50 @@ handle_map(struct wl_listener *listener, void *data) {
         }
     }
 
-    toplevel_focus(state, toplevel);
+    toplevel_focus(state, toplevel, true);
 }
 
 static struct toplevel *
-find_next_to_focus_from_prev(struct toplevel *toplevel) {
-    if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
-        struct wl_list *next = wl_list_next_or_prev(&toplevel->workspace->floats, &toplevel->link);
-        if(next) {
-            return CONTAINER_OF(next, struct toplevel, link);
-        }
+find_next_to_focus_float(struct toplevel *toplevel) {
+    ASSERT(toplevel->state == TOPLEVEL_STATE_FLOAT);
 
-        // might be NULL
-        return toplevel->workspace->master;
-    }
-
-    ASSERT(toplevel->state == TOPLEVEL_STATE_TILED && "should not be called for fullscreen toplevels");
-
-    if(toplevel == toplevel->workspace->master) {
-        // this is master
-        struct wl_list *bottom_slave = wl_list_last(&toplevel->workspace->slaves);
-        if(bottom_slave) {
-            return CONTAINER_OF(bottom_slave, struct toplevel, link);
-        }
-
-        // nothing left
-        return NULL;
-    }
-
-    struct wl_list *next = wl_list_next_or_prev(&toplevel->workspace->slaves, &toplevel->link);
+    struct wl_list *next = wl_list_next_or_prev(&toplevel->workspace->floats, &toplevel->link);
     if(next) {
         return CONTAINER_OF(next, struct toplevel, link);
     }
 
+    // might be NULL
     return toplevel->workspace->master;
+}
+
+static struct toplevel *
+find_next_to_focus_tiled(struct toplevel *toplevel) {
+    ASSERT(toplevel->state == TOPLEVEL_STATE_TILED);
+
+    if(toplevel == toplevel->workspace->master) {
+        struct wl_list *bottom_slave = wl_list_last(&toplevel->workspace->slaves);
+        if(bottom_slave) {
+            return CONTAINER_OF(bottom_slave, struct toplevel, link);
+        }
+    } else {
+        // for slaves first try other slaves, then master
+        struct wl_list *next = wl_list_next_or_prev(&toplevel->workspace->slaves, &toplevel->link);
+        if(next) {
+            return CONTAINER_OF(next, struct toplevel, link);
+        }
+
+        if(toplevel->workspace->master) {
+            return toplevel->workspace->master;
+        }
+    }
+
+    // if none, then try floats
+    struct wl_list *next = wl_list_first(&toplevel->workspace->floats);
+    if(next) {
+        return CONTAINER_OF(next, struct toplevel, link);
+    }
+
+    return NULL;
 }
 
 static void
@@ -232,57 +281,51 @@ handle_unmap(struct wl_listener *listener, void *data) {
 
     struct workspace *workspace = toplevel->workspace;
 
-    if(toplevel == state->focused_toplevel) {
-        state->focused_toplevel = NULL;
+    if(toplevel == state->warp_on_transaction) {
+        state->warp_on_transaction = NULL;
     }
-
-    // turn off its scene nodes
-    wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
 
     if(toplevel == state->grabbed_toplevel) {
         operation_stop_whatever(state);
+        // in this case `toplevel->workspace` may not reflect valid state, since we only update it once the
+        // toplevel is dropped, so we use `state->active_workspace`
+        output_focus(state, state->active_workspace->output, true);
+    } else {
+        switch(toplevel->state) {
+            case TOPLEVEL_STATE_TILED: {
+                if(toplevel == state->focused_toplevel) {
+                    // before removing the toplevel from the layout etc, find the one to give the focus next
+                    struct toplevel *focus_next = find_next_to_focus_tiled(toplevel);
+                    toplevel_focus(state, focus_next, false);
+                }
 
-        struct output *output = cursor_get_output(state);
-        if(!output) {
-            return;
-        }
+                layout_remove(toplevel);
+                layout_configure(state, toplevel->workspace);
+                break;
+            }
+            case TOPLEVEL_STATE_FLOAT: {
+                if(toplevel == state->focused_toplevel) {
+                    // before removing the toplevel from the layout etc, find the one to give the focus next
+                    struct toplevel *focus_next = find_next_to_focus_float(toplevel);
+                    toplevel_focus(state, focus_next, false);
+                }
 
-        // find the next thing to give focus to
-        output_focus(state, output);
-        return;
-    }
-
-    // before removing the toplevel from the layout etc, find the one to give the focus next
-    struct toplevel *focus_next = find_next_to_focus_from_prev(toplevel);
-
-    switch(toplevel->state) {
-        case TOPLEVEL_STATE_TILED: {
-            layout_remove(toplevel);
-            layout_configure(state, toplevel->workspace);
-
-            // add it as a ghost for the next transaction. TODO: this may be done in a cleaner manner
-            toplevel->is_ghost = true;
-            wl_list_insert(&workspace->ghosts, &toplevel->link);
-            wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
-            transaction_mark_dirty(state, toplevel);
-
-            break;
-        }
-        case TOPLEVEL_STATE_FLOAT: {
-            // if floating just remove him from the list
-            wl_list_remove(&toplevel->link);
-            break;
-        }
-        case TOPLEVEL_STATE_FULLSCREEN: {
-            workspace->fullscreen = NULL;
-            output_focus(state, workspace->output);
-            return;
+                wl_list_remove(&toplevel->link);
+                break;
+            }
+            case TOPLEVEL_STATE_FULLSCREEN: {
+                workspace->fullscreen = NULL;
+                output_focus(state, workspace->output, true);
+                break;
+            }
         }
     }
 
-    if(focus_next) {
-        toplevel_focus(state, focus_next);
-    }
+    // add it as a ghost for the next transaction
+    toplevel->is_ghost = true;
+    wl_list_insert(&workspace->ghosts, &toplevel->link);
+    wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
+    transaction_mark_dirty(state, toplevel);
 }
 
 static void
@@ -315,12 +358,11 @@ toplevel_send_frame_done(struct toplevel *toplevel) {
     send_frame_done_iter(&toplevel->scene_tree->node, &now);
 }
 
-static bool
-should_have_border(struct state *state, struct toplevel *toplevel) {
-    bool smart_gaps = state->config.gaps.smart && toplevel == toplevel->workspace->master &&
-                      wl_list_empty(&toplevel->workspace->slaves);
-
-    return toplevel->state != TOPLEVEL_STATE_FULLSCREEN && !smart_gaps;
+static void
+send_scale(struct toplevel *toplevel, float scale) {
+    wlr_fractional_scale_v1_notify_scale(toplevel->wlr_toplevel->base->surface, scale);
+    // fallback for the clients not supporting the fractional scale protocol
+    wlr_surface_set_preferred_buffer_scale(toplevel->wlr_toplevel->base->surface, ceil(scale));
 }
 
 static void
@@ -347,10 +389,20 @@ handle_commit(struct wl_listener *listener, void *data) {
             toplevel->needs_centering = true;
         }
 
+        if(state->active_workspace) {
+            // if there is an output we try and guess this is going to be the output this toplevel is going to be
+            // displayed on. this might change if the user changes the workspace for example, or for any other reason,
+            // but is a good guess most of the time. we send this outputs scale info to the client, so it can map the
+            // surface with that scale in mind, resulting in less flicker
+            struct output *current_output = state->active_workspace->output;
+            send_scale(toplevel, current_output->wlr_output->scale);
+        }
+
         wlr_xdg_toplevel_set_size(toplevel->wlr_toplevel, width, height);
         wlr_xdg_toplevel_set_wm_capabilities(toplevel->wlr_toplevel, WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN);
-        // in order for the hacks to be sent
-        toplevel_update_state(toplevel, toplevel->state);
+        if(toplevel->state == TOPLEVEL_STATE_TILED) {
+            // send hacks
+        }
         return;
     }
 
@@ -365,7 +417,7 @@ handle_commit(struct wl_listener *listener, void *data) {
         toplevel->pending.height = geometry->height;
 
         // need to add the border size to the box
-        if(should_have_border(state, toplevel)) {
+        if(toplevel->has_border) {
             toplevel->pending.width += 2 * state->config.border.width;
             toplevel->pending.height += 2 * state->config.border.width;
         }
@@ -410,6 +462,7 @@ handle_destroy(struct wl_listener *listener, void *data) {
     UNUSED(data);
 
     struct toplevel *toplevel = CONTAINER_OF(listener, struct toplevel, destroy);
+    ASSERT(!toplevel->wlr_toplevel->base->surface->mapped);
 
     wlr_foreign_toplevel_handle_v1_destroy(toplevel->foreign_toplevel_handle);
 
@@ -440,6 +493,10 @@ handle_request_move(struct wl_listener *listener, void *data) {
     struct toplevel *toplevel = CONTAINER_OF(listener, struct toplevel, request_move);
     struct state *state = state_get();
 
+    if(!toplevel->wlr_toplevel->base->surface->mapped) {
+        return;
+    }
+
     enum view *pointer_focused = seat_get_pointer_focused(state);
     if(!pointer_focused || toplevel != view_get_toplevel(pointer_focused)) {
         return;
@@ -453,6 +510,10 @@ handle_request_resize(struct wl_listener *listener, void *data) {
     struct toplevel *toplevel = CONTAINER_OF(listener, struct toplevel, request_resize);
     struct wlr_xdg_toplevel_resize_event *event = data;
     struct state *state = state_get();
+
+    if(!toplevel->wlr_toplevel->base->surface->mapped) {
+        return;
+    }
 
     enum view *pointer_focused = seat_get_pointer_focused(state);
     if(!pointer_focused || toplevel != view_get_toplevel(pointer_focused)) {
@@ -470,7 +531,7 @@ handle_request_maximize(struct wl_listener *listener, void *data) {
 
     // no op
     if(toplevel->wlr_toplevel->base->initialized) {
-        wlr_xdg_surface_schedule_configure(toplevel->wlr_toplevel->base);
+        // wlr_xdg_surface_schedule_configure(toplevel->wlr_toplevel->base);
     }
 }
 
@@ -487,9 +548,9 @@ handle_request_fullscreen(struct wl_listener *listener, void *data) {
     }
 
     if(toplevel->wlr_toplevel->requested.fullscreen) {
-        toplevel_set_fullscreen(state, toplevel, true);
+        toplevel_set_state(state, toplevel, TOPLEVEL_STATE_FULLSCREEN);
     } else {
-        toplevel_set_fullscreen(state, toplevel, false);
+        toplevel_set_state(state, toplevel, toplevel->prev_state);
     }
 }
 
@@ -509,13 +570,6 @@ handle_set_title(struct wl_listener *listener, void *data) {
     wlr_foreign_toplevel_handle_v1_set_title(toplevel->foreign_toplevel_handle, toplevel->wlr_toplevel->title);
 }
 
-static void
-send_scale(struct toplevel *toplevel, float scale) {
-    wlr_fractional_scale_v1_notify_scale(toplevel->wlr_toplevel->base->surface, scale);
-    // fallback for the clients not supporting the fractional scale protocol
-    wlr_surface_set_preferred_buffer_scale(toplevel->wlr_toplevel->base->surface, ceil(scale));
-}
-
 struct toplevel *
 toplevel_create(struct state *state, struct wlr_xdg_toplevel *wlr_toplevel) {
     struct toplevel *toplevel = ALLOC(struct toplevel);
@@ -523,19 +577,11 @@ toplevel_create(struct state *state, struct wlr_xdg_toplevel *wlr_toplevel) {
     wlr_toplevel->base->data = toplevel;
 
     toplevel->view = VIEW_TOPLEVEL;
-    // we create the tree in the tiled tree, and swap it later if necessery. NOTE: disable the tree, see notes in
-    // `handle_map()`
+    // we create the tree in the tiled tree, and swap it later if necessery
     toplevel->scene_tree = wlr_scene_tree_create(state->scene.trees.tiled);
+    // in order to obtain this toplevel we keep a pointer to view, from which the type of view can be read, and then
+    // extracted by using `CONTAINER_OF()`
     toplevel->scene_tree->node.data = &toplevel->view;
-
-    if(state->active_workspace) {
-        // if there is an output we try and guess this is going to be the output this toplevel is going to be
-        // displayed on. this might change if the user changes the workspace for example, or for any other reason,
-        // but is a good guess most of the time. we send this outputs scale info to the client, so it can map the
-        // surface with that scale in mind, resulting in less flicker
-        struct output *current_output = state->active_workspace->output;
-        send_scale(toplevel, current_output->wlr_output->scale);
-    }
 
     toplevel->foreign_toplevel_handle = wlr_foreign_toplevel_handle_v1_create(state->foreign_toplevel_manager);
 
@@ -573,26 +619,14 @@ toplevel_create(struct state *state, struct wlr_xdg_toplevel *wlr_toplevel) {
 }
 
 void
-toplevel_float_raise(struct state *state, struct toplevel *toplevel) {
-    UNUSED(state);
-
-    ASSERT(toplevel->state == TOPLEVEL_STATE_FLOAT);
-
-    // move to top
-    wl_list_remove(&toplevel->link);
-    wl_list_insert(&toplevel->workspace->floats, &toplevel->link);
-
-    wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
-}
-
-void
-toplevel_focus(struct state *state, struct toplevel *toplevel) {
+toplevel_focus(struct state *state, struct toplevel *toplevel, bool warp) {
     if(state->lock_mgr.lock || state->focused_lock || state->is_exclusive ||
             (state->grabbed_toplevel && toplevel != state->grabbed_toplevel) ||
             (toplevel && toplevel->workspace->fullscreen && toplevel != toplevel->workspace->fullscreen)) {
         return;
     }
 
+    // TODO: instead add a view_unfocus_current() that should be called in every focus request
     struct toplevel *prev = state->focused_toplevel;
     if(prev == toplevel) {
         // already focused
@@ -606,12 +640,12 @@ toplevel_focus(struct state *state, struct toplevel *toplevel) {
         toplevel_set_border_color(prev, state->config.border.color.inactive);
     }
 
+    state->focused_toplevel = toplevel;
+
     if(!toplevel) {
         // this means we just wanted to unfocus whatever was focused
         return;
     }
-
-    state->focused_toplevel = toplevel;
 
     wlr_xdg_toplevel_set_activated(toplevel->wlr_toplevel, true);
     wlr_foreign_toplevel_handle_v1_set_activated(toplevel->foreign_toplevel_handle, true);
@@ -621,6 +655,16 @@ toplevel_focus(struct state *state, struct toplevel *toplevel) {
     if(keyboard) {
         wlr_seat_keyboard_notify_enter(state->seat.wlr_seat, toplevel->wlr_toplevel->base->surface, keyboard->keycodes,
                 keyboard->num_keycodes, &keyboard->modifiers);
+    }
+
+    if(warp && state->config.cursor.warp) {
+        if(toplevel->transaction_state == TRANSACTION_STATE_CLEAN) {
+            cursor_warp_toplevel(state, toplevel);
+        } else {
+            // mark it so when the transaction commits the cursor is warped
+            state->warp_on_transaction = toplevel;
+            transaction_schedule_commit(state, toplevel->workspace);
+        }
     }
 }
 
@@ -665,12 +709,14 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
             break;
         }
         case TOPLEVEL_STATE_FULLSCREEN: {
-            toplevel->workspace = workspace;
-
             if(workspace->fullscreen) {
-                // remove the current one
-                toplevel_set_fullscreen(state, workspace->fullscreen, false);
+                return;
             }
+
+            old_workspace->fullscreen = NULL;
+            toplevel->workspace = workspace;
+            workspace->fullscreen = toplevel;
+            toplevel->state = TOPLEVEL_STATE_FULLSCREEN;
 
             toplevel_configure(state, toplevel, &workspace->output->full_area);
             break;
@@ -708,77 +754,6 @@ toplevel_set_border_color(struct toplevel *toplevel, color_t color) {
     float wlr_color[4];
     color_to_wlr_color(color, wlr_color);
     wlr_scene_rect_set_color(toplevel->border, wlr_color);
-}
-
-static void
-set_fullscreen(struct state *state, struct toplevel *toplevel) {
-    if(!toplevel->wlr_toplevel->base->surface->mapped || toplevel->state == TOPLEVEL_STATE_FULLSCREEN ||
-            toplevel->workspace->fullscreen || toplevel == state->grabbed_toplevel) {
-        return;
-    }
-
-    struct workspace *workspace = toplevel->workspace;
-    struct output *output = workspace->output;
-
-    switch(toplevel->state) {
-        case TOPLEVEL_STATE_TILED: {
-            layout_remove(toplevel);
-            layout_configure(state, workspace);
-            break;
-        }
-        case TOPLEVEL_STATE_FLOAT: {
-            wl_list_remove(&toplevel->link);
-            break;
-        }
-        case TOPLEVEL_STATE_FULLSCREEN: {
-            UNREACHABLE();
-            break;
-        }
-    }
-
-    toplevel->prev_state = toplevel->state;
-
-    workspace->fullscreen = toplevel;
-    toplevel_update_state(toplevel, TOPLEVEL_STATE_FULLSCREEN);
-
-    wlr_xdg_toplevel_set_fullscreen(toplevel->wlr_toplevel, true);
-    toplevel_configure(state, toplevel, &output->full_area);
-
-    wlr_foreign_toplevel_handle_v1_set_fullscreen(toplevel->foreign_toplevel_handle, true);
-}
-
-static void
-unset_fullscreen(struct state *state, struct toplevel *toplevel) {
-    if(toplevel->state != TOPLEVEL_STATE_FULLSCREEN) {
-        return;
-    }
-
-    struct workspace *workspace = toplevel->workspace;
-    workspace->fullscreen = NULL;
-
-    wlr_xdg_toplevel_set_fullscreen(toplevel->wlr_toplevel, false);
-    toplevel_update_state(toplevel, toplevel->prev_state);
-    if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
-        wl_list_insert(&workspace->floats, &toplevel->link);
-        int width, height;
-        default_size(state, toplevel, &width, &height);
-        toplevel_configure(state, toplevel, &(struct wlr_box){0});
-        toplevel->needs_centering = true;
-    } else {
-        layout_add(workspace, toplevel);
-        layout_configure(state, workspace);
-    }
-
-    wlr_foreign_toplevel_handle_v1_set_fullscreen(toplevel->foreign_toplevel_handle, false);
-}
-
-void
-toplevel_set_fullscreen(struct state *state, struct toplevel *toplevel, bool set) {
-    if(set) {
-        set_fullscreen(state, toplevel);
-    } else {
-        unset_fullscreen(state, toplevel);
-    }
 }
 
 struct output *
@@ -848,64 +823,133 @@ toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_bo
     send_size(state, toplevel, width, height);
 }
 
-// void
-// toplevel_warp_cursor(void) {
-//     struct mwc_toplevel *toplevel = server.focused_toplevel;
-//     if(toplevel == NULL)
-//         return;
-//
-//     struct wlr_box geo_box = toplevel_get_geometry(toplevel);
-//     wlr_cursor_warp(server.cursor, NULL, toplevel->scene_tree->node.x + geo_box.x + toplevel->current.width / 2.0,
-//             toplevel->scene_tree->node.y + geo_box.y + toplevel->current.height / 2.0);
-//
-//     struct timespec now;
-//     clock_gettime(CLOCK_MONOTONIC, &now);
-//
-//     pointer_handle_focus(now.tv_sec * 1000 + now.tv_nsec / 1000, false);
-// }
-// void
-// xdg_activation_handle_token_destroy(struct wl_listener *listener, void *data) {
-//     struct mwc_token *token_data = wl_container_of(listener, token_data, destroy);
-//     wl_list_remove(&token_data->destroy.link);
-//
-//     free(token_data);
-// }
-//
-// void
-// xdg_activation_handle_new_token(struct wl_listener *listener, void *data) {
-// 	struct wlr_xdg_activation_token_v1 *wlr_token = data;
-//   if(wlr_token->surface == NULL || wlr_token->seat == NULL) return;
-//
-// 	struct mwc_token *token = calloc(1, sizeof(*token));
-//   token->wlr_token = wlr_token;
-// 	wlr_token->data = token;
-//
-// 	token->destroy.notify = xdg_activation_handle_token_destroy;
-// 	wl_signal_add(&wlr_token->events.destroy, &token->destroy);
-// }
-//
-// void
-// xdg_activation_handle_request(struct wl_listener *listener, void *data) {
-// 	const struct wlr_xdg_activation_v1_request_activate_event *event = data;
-//
-// 	struct wlr_xdg_surface *xdg_surface = wlr_xdg_surface_try_from_wlr_surface(event->surface);
-// 	if(xdg_surface == NULL) return;
-//
-// 	struct wlr_scene_tree *tree = xdg_surface->data;
-//   /* this happens if the toplevel has not been mapped yet. anyway it does not make sense to
-//    * request that i activate this surface that is not on the screen */
-//   if(tree == NULL) return;
-//
-//   struct mwc_something *something = tree->node.data;
-//   if(something == NULL) return;
-//
-//   if(something->type == MWC_POPUP) {
-//     something = popup_get_root_parent(something->popup);
-//   }
-//
-//   if(something->type != MWC_TOPLEVEL) return;
-//
-//   struct mwc_toplevel *toplevel = something->toplevel;
-//
-//   focus_toplevel(toplevel);
-// }
+static void
+set_state(struct toplevel *toplevel, enum toplevel_state new_state) {
+    toplevel->state = new_state;
+    toplevel->needs_reparenting = true;
+}
+
+static void
+set_tiled(struct state *state, struct toplevel *toplevel) {
+    struct workspace *workspace = toplevel->workspace;
+
+    switch(toplevel->state) {
+        case TOPLEVEL_STATE_TILED: {
+            return;
+        }
+        case TOPLEVEL_STATE_FLOAT: {
+            wl_list_remove(&toplevel->link);
+            break;
+        }
+        case TOPLEVEL_STATE_FULLSCREEN: {
+            workspace->fullscreen = NULL;
+
+            wlr_xdg_toplevel_set_fullscreen(toplevel->wlr_toplevel, false);
+            wlr_foreign_toplevel_handle_v1_set_fullscreen(toplevel->foreign_toplevel_handle, false);
+
+            break;
+        }
+    }
+
+    set_state(toplevel, TOPLEVEL_STATE_TILED);
+    layout_add(workspace, toplevel);
+    layout_configure(state, workspace);
+
+    set_hacks(toplevel);
+}
+
+static void
+set_float(struct state *state, struct toplevel *toplevel) {
+    struct workspace *workspace = toplevel->workspace;
+
+    switch(toplevel->state) {
+        case TOPLEVEL_STATE_TILED: {
+            layout_remove(toplevel);
+            layout_configure(state, workspace);
+            break;
+        }
+        case TOPLEVEL_STATE_FLOAT: {
+            return;
+        }
+        case TOPLEVEL_STATE_FULLSCREEN: {
+            workspace->fullscreen = NULL;
+
+            wlr_xdg_toplevel_set_fullscreen(toplevel->wlr_toplevel, false);
+            wlr_foreign_toplevel_handle_v1_set_fullscreen(toplevel->foreign_toplevel_handle, false);
+            break;
+        }
+    }
+
+    wl_list_insert(&workspace->floats, &toplevel->link);
+    set_state(toplevel, TOPLEVEL_STATE_FLOAT);
+
+    int width, height;
+    default_size(state, toplevel, &width, &height);
+
+    toplevel_configure(state, toplevel,
+            &(struct wlr_box){
+                    .width = width,
+                    .height = height,
+            });
+    toplevel->needs_centering = true;
+
+    reset_hacks(toplevel);
+}
+
+static void
+set_fullscreen(struct state *state, struct toplevel *toplevel) {
+    struct workspace *workspace = toplevel->workspace;
+    if(workspace->fullscreen) {
+        return;
+    }
+
+    switch(toplevel->state) {
+        case TOPLEVEL_STATE_TILED: {
+            layout_remove(toplevel);
+            layout_configure(state, workspace);
+            break;
+        }
+        case TOPLEVEL_STATE_FLOAT: {
+            wl_list_remove(&toplevel->link);
+            break;
+        }
+        case TOPLEVEL_STATE_FULLSCREEN: {
+            return;
+        }
+    }
+
+    // keep note of the previous state in order to restore it later
+    toplevel->prev_state = toplevel->state;
+
+    workspace->fullscreen = toplevel;
+    set_state(toplevel, TOPLEVEL_STATE_FULLSCREEN);
+
+    reset_hacks(toplevel);
+
+    wlr_xdg_toplevel_set_fullscreen(toplevel->wlr_toplevel, true);
+    toplevel_configure(state, toplevel, &workspace->output->full_area);
+    wlr_foreign_toplevel_handle_v1_set_fullscreen(toplevel->foreign_toplevel_handle, true);
+}
+
+void
+toplevel_set_state(struct state *state, struct toplevel *toplevel, enum toplevel_state new_state) {
+    if(toplevel == state->grabbed_toplevel) {
+        // cant change the state of this toplevel until dropped
+        return;
+    }
+
+    switch(new_state) {
+        case TOPLEVEL_STATE_TILED: {
+            set_tiled(state, toplevel);
+            break;
+        }
+        case TOPLEVEL_STATE_FLOAT: {
+            set_float(state, toplevel);
+            break;
+        }
+        case TOPLEVEL_STATE_FULLSCREEN: {
+            set_fullscreen(state, toplevel);
+            break;
+        };
+    }
+}

@@ -42,7 +42,7 @@ layout_remove(struct toplevel *toplevel) {
 
 void
 layout_configure(struct state *state, struct workspace *workspace) {
-    if(workspace->fullscreen || !workspace->master) {
+    if(!workspace->master) {
         return;
     }
 

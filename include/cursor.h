@@ -45,9 +45,6 @@ void
 cursor_set_theme(struct cursor *cursor, char *theme, int size);
 
 void
-cursor_warp_focused_toplevel(struct state *state);
-
-void
 cursor_warp_output(struct state *state, struct output *output);
 
 void

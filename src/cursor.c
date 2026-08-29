@@ -37,7 +37,7 @@ cursor_focus(struct state *state, u32 time_ms, bool handle_keyboard_focus) {
     }
 
     if(handle_keyboard_focus) {
-        view_focus(state, view);
+        view_focus(state, view, false);
     }
 
     // TODO: contraints
@@ -151,9 +151,11 @@ handle_button(struct wl_listener *listener, void *data) {
 
     // raise if floating toplevel
     enum view *view = seat_get_pointer_focused(state);
-    struct toplevel *toplevel = view_get_toplevel(view);
-    if(toplevel && toplevel->state == TOPLEVEL_STATE_FLOAT) {
-        toplevel_raise(toplevel);
+    if(view) {
+        struct toplevel *toplevel = view_get_toplevel(view);
+        if(toplevel && toplevel->state == TOPLEVEL_STATE_FLOAT && toplevel != state->grabbed_toplevel) {
+            toplevel_raise(toplevel);
+        }
     }
 
     if(event->state == WL_POINTER_BUTTON_STATE_RELEASED && state->operation) {
@@ -275,18 +277,6 @@ cursor_get_output(struct state *state) {
 
     struct output *output = wlr_output->data;
     return output;
-}
-
-void
-cursor_warp_focused_toplevel(struct state *state) {
-    struct toplevel *toplevel = state->focused_toplevel;
-    if(!toplevel) {
-        return;
-    }
-
-    wlr_cursor_warp(state->cursor.wlr_cursor, NULL, toplevel->current.x + toplevel->current.width / 2.0f,
-            toplevel->current.y + toplevel->current.height / 2.0);
-    cursor_focus(state, time_now_ms(), false);
 }
 
 void

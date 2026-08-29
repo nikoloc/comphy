@@ -20,7 +20,6 @@
 // that this function should not be called from elsewhere
 struct state {
     struct wl_display *display;
-    bool is_exiting;
 
     struct wlr_output_layout *output_layout;
 
@@ -50,12 +49,9 @@ struct state {
     double grab_x, grab_y;
     struct wlr_box grabbed_toplevel_initial_box;
     u32 resize_edges;
-    bool client_driven_move_resize;
 
-    // in order for the workspace switching to be atomic, we wait for its transaction to finish and only switch to it
-    // afterwards. `workspace_set_active()` thus sets the `state->pending_workspace` and schedules a transaction commit
-    struct workspace *active_workspace, *pending_workspace;
-    bool keep_focus_on_workspace_change;
+    struct workspace *active_workspace;
+    struct toplevel *warp_on_transaction;
 
     struct lock_surface *focused_lock;
     struct layer *focused_layer;

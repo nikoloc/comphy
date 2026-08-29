@@ -22,32 +22,34 @@ toggle_float(struct state *state) {
         return;
     }
 
-    switch(toplevel->state) {
-        case TOPLEVEL_STATE_TILED: {
-            struct workspace *workspace = toplevel->workspace;
-            layout_remove(toplevel);
-            wl_list_insert(&workspace->floats, &toplevel->link);
-
-            toplevel_update_state(toplevel, TOPLEVEL_STATE_FLOAT);
-
-            layout_configure(state, workspace);
-            toplevel_configure(state, toplevel, &(struct wlr_box){0});
-            toplevel->needs_centering = true;
-            break;
+    if(toplevel == state->grabbed_toplevel) {
+        // just update the underlying state, so the right thing happens on operation stop
+        switch(toplevel->state) {
+            case TOPLEVEL_STATE_TILED: {
+                toplevel->state = TOPLEVEL_STATE_FLOAT;
+                break;
+            }
+            case TOPLEVEL_STATE_FLOAT: {
+                toplevel->state = TOPLEVEL_STATE_TILED;
+                break;
+            }
+            case TOPLEVEL_STATE_FULLSCREEN: {
+                break;
+            }
         }
-        case TOPLEVEL_STATE_FLOAT: {
-            struct workspace *workspace = toplevel->workspace;
-            wl_list_remove(&toplevel->link);
-            layout_add(workspace, toplevel);
-
-            toplevel_update_state(toplevel, TOPLEVEL_STATE_TILED);
-
-            layout_configure(state, workspace);
-            break;
-        }
-        case TOPLEVEL_STATE_FULLSCREEN: {
-            // no op
-            break;
+    } else {
+        switch(toplevel->state) {
+            case TOPLEVEL_STATE_TILED: {
+                toplevel_set_state(state, toplevel, TOPLEVEL_STATE_FLOAT);
+                break;
+            }
+            case TOPLEVEL_STATE_FLOAT: {
+                toplevel_set_state(state, toplevel, TOPLEVEL_STATE_TILED);
+                break;
+            }
+            case TOPLEVEL_STATE_FULLSCREEN: {
+                break;
+            }
         }
     }
 }
@@ -69,6 +71,10 @@ update_all_borders(struct state *state) {
     wl_list_for_each(output, &state->outputs, link) {
         struct workspace *workspace;
         wl_list_for_each(workspace, &output->workspaces, link) {
+            if(workspace->fullscreen) {
+                update_border_color(state, workspace->fullscreen);
+            }
+
             if(workspace->master) {
                 update_border_color(state, workspace->master);
             }
@@ -103,7 +109,7 @@ static void
 focus_cross_output(struct state *state, struct toplevel *toplevel, enum wlr_direction direction) {
     struct output *output = get_cross_output(state, toplevel, direction);
     if(output) {
-        output_focus(state, output);
+        output_focus(state, output, true);
     }
 }
 
@@ -167,18 +173,30 @@ focus(struct state *state, enum wlr_direction direction) {
         return;
     }
 
-    if(toplevel->state == TOPLEVEL_STATE_TILED) {
-        // for tiled try to figure out the next one from the layout
-        struct toplevel *focus_next = find_in_direction(toplevel, direction);
-        if(focus_next) {
-            toplevel_focus(state, focus_next);
-            return;
+    switch(toplevel->state) {
+        case TOPLEVEL_STATE_TILED: {
+            // for tiled try to figure out the next one from the layout
+            struct toplevel *focus_next = find_in_direction(toplevel, direction);
+            if(focus_next) {
+                toplevel_focus(state, focus_next, true);
+            } else {
+                focus_cross_output(state, toplevel, direction);
+            }
+
+            break;
+        }
+        case TOPLEVEL_STATE_FLOAT: {
+            // for floats and fullscreened toplevels we just move focus across outputs; doing anything else just does
+            // not seem worth the work tbh as any other way of doing would not feed any more natural and would need more
+            // work
+            focus_cross_output(state, toplevel, direction);
+            break;
+        }
+        case TOPLEVEL_STATE_FULLSCREEN: {
+            focus_cross_output(state, toplevel, direction);
+            break;
         }
     }
-
-    // for floats and fullscreened toplevels we just move focus across outputs; doing anything else just does not
-    // seem worth the work tbh as any other way of doing would not feed any more natural and would need more work
-    focus_cross_output(state, toplevel, direction);
 }
 
 static void
@@ -237,17 +255,28 @@ move(struct state *state, enum wlr_direction direction) {
         return;
     }
 
-    if(toplevel->state == TOPLEVEL_STATE_TILED) {
-        // for tiled try to figure out the next one from the layout
-        struct toplevel *swap = find_in_direction(toplevel, direction);
-        if(swap) {
-            swap_layout(toplevel, swap, direction);
-            layout_configure(state, toplevel->workspace);
-            return;
+    switch(toplevel->state) {
+        case TOPLEVEL_STATE_TILED: {
+            // for tiled try to figure out the next one from the layout
+            struct toplevel *swap = find_in_direction(toplevel, direction);
+            if(swap) {
+                swap_layout(toplevel, swap, direction);
+                layout_configure(state, toplevel->workspace);
+            } else {
+                move_cross_output(state, toplevel, direction);
+            }
+
+            break;
+        }
+        case TOPLEVEL_STATE_FLOAT: {
+            move_cross_output(state, toplevel, direction);
+            break;
+        }
+        case TOPLEVEL_STATE_FULLSCREEN: {
+            move_cross_output(state, toplevel, direction);
+            break;
         }
     }
-
-    move_cross_output(state, toplevel, direction);
 }
 
 void
@@ -270,6 +299,7 @@ action_perform(struct state *state, enum action_type type, void *_action) {
 
             struct workspace *workspace = workspace_find_by_idx(state, action->idx);
             if(workspace) {
+                operation_stop_whatever(state);
                 workspace_set_active(state, workspace, false);
             }
             break;
@@ -309,8 +339,6 @@ action_perform(struct state *state, enum action_type type, void *_action) {
         }
         case ACTION_TYPE_EXIT: {
             wl_display_terminate(state->display);
-            // TODO: remove this flag by being smarter
-            state->is_exiting = true;
             break;
         }
         case ACTION_TYPE_CLOSE: {
@@ -332,7 +360,11 @@ action_perform(struct state *state, enum action_type type, void *_action) {
                 break;
             }
 
-            toplevel_set_fullscreen(state, toplevel, toplevel->state != TOPLEVEL_STATE_FULLSCREEN);
+            if(toplevel->state != TOPLEVEL_STATE_FULLSCREEN) {
+                toplevel_set_state(state, toplevel, TOPLEVEL_STATE_FULLSCREEN);
+            } else {
+                toplevel_set_state(state, toplevel, toplevel->prev_state);
+            }
             break;
         }
         case ACTION_TYPE_TOGGLE_FAKE_FULLSCREEN: {
@@ -450,7 +482,7 @@ action_perform(struct state *state, enum action_type type, void *_action) {
         }
         case ACTION_TYPE_CURSOR_WARP: {
             struct action_cursor_warp *action = _action;
-            state->config.cursor.warp = action->value;
+            state->config.cursor.warp = action->enable;
             break;
         }
         case ACTION_TYPE_CURSOR_HIDE_AFTER_MS: {

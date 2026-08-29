@@ -45,24 +45,21 @@ create_temp_dir(void) {
 
 static void
 init_logs(bool debug) {
-    if(debug) {
-        // make it so all the logs do to the log file
-        FILE *file = fopen(COMPHY_LOG_FILE, "w");
-        if(file) {
-            int fd = fileno(file);
-            close(1);
-            close(2);
-
-            dup2(fd, 1);
-            dup2(fd, 2);
-
-            fclose(file);
-        }
-
-        wlr_log_init(WLR_DEBUG, NULL);
-    } else {
-        wlr_log_init(WLR_INFO, NULL);
-    }
+    // if(debug) {
+    //     // make it so all the logs do to the log file
+    //     FILE *file = fopen(COMPHY_LOG_FILE, "w");
+    //     if(file) {
+    //         int fd = fileno(file);
+    //         dup2(fd, 1);
+    //         dup2(fd, 2);
+    //
+    //         fclose(file);
+    //     }
+    //
+    wlr_log_init(WLR_DEBUG, NULL);
+    // } else {
+    //     wlr_log_init(WLR_INFO, NULL);
+    // }
 }
 
 static bool

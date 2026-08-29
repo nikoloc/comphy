@@ -21,9 +21,12 @@ struct output {
         struct wl_list overlay;
     } layers;
 
+    struct workspace *active_workspace;
     // when the output is created we create a dummy workspace for it to serve until the user creates a real workspace.
     // on the creation of the first real workspace we just repace the dummy one with the new one.
-    struct workspace *active_workspace, *dummy_workspace;
+    struct workspace *dummy_workspace;
+
+    struct workspace *presented_workspace;
 
     struct wlr_scene_rect *lock_rect;
 
@@ -42,7 +45,7 @@ output_configure_from_rules(struct state *state, struct output *output);
 
 // give focus to some view on this workspace in the general focus order; does not handle workspace switching!
 void
-output_focus(struct state *state, struct output *output);
+output_focus(struct state *state, struct output *output, bool should_warp);
 
 struct output *
 output_get_relative(struct state *state, struct output *output, enum wlr_direction direction);

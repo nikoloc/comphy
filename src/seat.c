@@ -68,7 +68,6 @@ seat_init(struct seat *seat, struct wl_display *display) {
     seat->request_set_selection.notify = handle_request_set_selection;
     wl_signal_add(&seat->wlr_seat->events.request_set_selection, &seat->request_set_selection);
 
-    // TODO: add dnd
     seat->request_drag.notify = handle_request_drag;
     wl_signal_add(&seat->wlr_seat->events.request_start_drag, &seat->request_drag);
 

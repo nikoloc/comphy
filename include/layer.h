@@ -25,10 +25,10 @@ struct layer *
 layer_create(struct state *state, struct wlr_layer_surface_v1 *wlr_layer);
 
 void
-layer_focus(struct state *state, struct layer *layer);
+layer_destroy(struct layer *layer);
 
 void
-layer_unfocus(struct state *state);
+layer_focus(struct state *state, struct layer *layer, bool warp);
 
 void
 layers_arrange(struct state *state, struct output *output);

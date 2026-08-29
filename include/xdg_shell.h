@@ -11,7 +11,6 @@ struct xdg_shell {
 
     struct wlr_xdg_activation_v1 *xdg_activation;
     struct wl_listener request_activate;
-    struct wl_listener new_token;
 };
 
 void
