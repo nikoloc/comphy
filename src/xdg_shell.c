@@ -4,7 +4,6 @@
 #include "popup.h"
 #include "state.h"
 #include "util/macros.h"
-#include "workspace.h"
 
 static void
 handle_new_toplevel(struct wl_listener *listener, void *data) {
@@ -39,8 +38,7 @@ handle_request_activate(struct wl_listener *listener, void *data) {
 
     struct toplevel *toplevel = view_get_toplevel(view);
     if(toplevel->wlr_toplevel->base->surface->mapped) {
-        workspace_set_active(state, toplevel->workspace, true);
-        toplevel_focus(state, toplevel, true);
+        toplevel_focus(state, toplevel, false);
     }
 }
 

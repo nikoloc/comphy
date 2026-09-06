@@ -83,7 +83,7 @@ struct output *
 toplevel_float_largest_output_intersection(struct state *state, struct toplevel *toplevel);
 
 void
-toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace);
+toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace, bool warp);
 
 u32
 toplevel_get_corner_closest_to(struct toplevel *toplevel, int x, int y);

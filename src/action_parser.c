@@ -100,10 +100,10 @@ action_destroy(enum action_type type, void *_action) {
             FREE(action->theme);
             break;
         }
-        case ACTION_TYPE_CURSOR_WARP: {
+        case ACTION_TYPE_CURSOR_HIDE_AFTER_MS: {
             break;
         }
-        case ACTION_TYPE_CURSOR_HIDE_AFTER_MS: {
+        case ACTION_TYPE_CURSOR_WARP: {
             break;
         }
         case ACTION_TYPE_GAPS: {
@@ -156,10 +156,12 @@ parse_state(const char *str, enum toplevel_state *state) {
         *state = TOPLEVEL_STATE_TILED;
         return true;
     }
+
     if(strcmp(str, "float") == 0) {
         *state = TOPLEVEL_STATE_FLOAT;
         return true;
     }
+
     return false;
 }
 
@@ -169,18 +171,42 @@ parse_direction(const char *str, enum wlr_direction *dir) {
         *dir = WLR_DIRECTION_UP;
         return true;
     }
+
     if(strcmp(str, "right") == 0) {
         *dir = WLR_DIRECTION_RIGHT;
         return true;
     }
+
     if(strcmp(str, "down") == 0) {
         *dir = WLR_DIRECTION_DOWN;
         return true;
     }
+
     if(strcmp(str, "left") == 0) {
         *dir = WLR_DIRECTION_LEFT;
         return true;
     }
+
+    return false;
+}
+
+static bool
+parse_cursor_warp(const char *str, enum cursor_warp *value) {
+    if(strcmp(str, "never") == 0) {
+        *value = CURSOR_WARP_NEVER;
+        return true;
+    }
+
+    if(strcmp(str, "on_output_change") == 0) {
+        *value = CURSOR_WARP_ON_OUTPUT_CHANGE;
+        return true;
+    }
+
+    if(strcmp(str, "always") == 0) {
+        *value = CURSOR_WARP_ALWAYS;
+        return true;
+    }
+
     return false;
 }
 
@@ -190,10 +216,12 @@ parse_bool(const char *str, bool *val) {
         *val = true;
         return true;
     }
+
     if(strcmp(str, "off") == 0) {
         *val = false;
         return true;
     }
+
     return false;
 }
 
@@ -203,18 +231,22 @@ parse_scroll_method(const char *str, enum libinput_config_scroll_method *method)
         *method = LIBINPUT_CONFIG_SCROLL_NO_SCROLL;
         return true;
     }
+
     if(strcmp(str, "two_fingers") == 0) {
         *method = LIBINPUT_CONFIG_SCROLL_2FG;
         return true;
     }
+
     if(strcmp(str, "edge") == 0) {
         *method = LIBINPUT_CONFIG_SCROLL_EDGE;
         return true;
     }
+
     if(strcmp(str, "on_button_down") == 0) {
         *method = LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN;
         return true;
     }
+
     return false;
 }
 
@@ -242,10 +274,11 @@ parse_modifiers(const char *str, uint32_t *modifiers) {
                   strcasecmp(token, "mod4") == 0) {
             *modifiers |= WLR_MODIFIER_LOGO;
         }
+
         token = strtok(NULL, "+");
     }
 
-    free(copy);
+    FREE(copy);
     return true;
 }
 
@@ -276,6 +309,7 @@ parse_keysym(const char *str, uint32_t *keysym) {
             return false;
         }
     }
+
     return true;
 }
 
@@ -318,8 +352,8 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "change_workspace") == 0) {
         *out_type = ACTION_TYPE_CHANGE_WORKSPACE;
         struct action_change_workspace *action = ALLOC(struct action_change_workspace);
@@ -330,13 +364,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_int(word, &action->idx)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "move_to_workspace") == 0) {
         *out_type = ACTION_TYPE_MOVE_TO_WORKSPACE;
         struct action_move_to_workspace *action = ALLOC(struct action_move_to_workspace);
@@ -347,13 +382,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_int(word, &action->idx)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "focus") == 0) {
         *out_type = ACTION_TYPE_FOCUS;
         struct action_focus *action = ALLOC(struct action_focus);
@@ -364,13 +400,13 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_direction(word, &action->direction)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
         return true;
-
     } else if(strcmp(word, "move") == 0) {
         *out_type = ACTION_TYPE_MOVE;
         struct action_move *action = ALLOC(struct action_move);
@@ -381,13 +417,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_direction(word, &action->direction)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "exec") == 0) {
         *out_type = ACTION_TYPE_EXEC;
         struct action_exec *action = ALLOC(struct action_exec);
@@ -398,9 +435,10 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
-        action->cmd = strdup(word);
-        return true;
 
+        action->cmd = strdup(word);
+
+        return true;
     } else if(strcmp(word, "env") == 0) {
         *out_type = ACTION_TYPE_ENV;
         struct action_env *action = ALLOC(struct action_env);
@@ -411,6 +449,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         action->key = strdup(word);
 
         if(!shell_parser_pop(parser, sizeof(word), word)) {
@@ -418,44 +457,46 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         action->value = strdup(word);
+
         return true;
 
     } else if(strcmp(word, "exit") == 0) {
         *out_type = ACTION_TYPE_EXIT;
         *dest = NULL;
-        return true;
 
+        return true;
     } else if(strcmp(word, "close") == 0) {
         *out_type = ACTION_TYPE_CLOSE;
         *dest = NULL;
-        return true;
 
+        return true;
     } else if(strcmp(word, "toggle_float") == 0) {
         *out_type = ACTION_TYPE_TOGGLE_FLOAT;
         *dest = NULL;
-        return true;
 
+        return true;
     } else if(strcmp(word, "toggle_fullscreen") == 0) {
         *out_type = ACTION_TYPE_TOGGLE_FULLSCREEN;
         *dest = NULL;
-        return true;
 
+        return true;
     } else if(strcmp(word, "toggle_fake_fullscreen") == 0) {
         *out_type = ACTION_TYPE_TOGGLE_FAKE_FULLSCREEN;
         *dest = NULL;
-        return true;
 
+        return true;
     } else if(strcmp(word, "start_move") == 0) {
         *out_type = ACTION_TYPE_START_MOVE;
         *dest = NULL;
-        return true;
 
+        return true;
     } else if(strcmp(word, "start_resize") == 0) {
         *out_type = ACTION_TYPE_START_RESIZE;
         *dest = NULL;
-        return true;
 
+        return true;
     } else if(strcmp(word, "repeat_rate") == 0) {
         *out_type = ACTION_TYPE_REPEAT_RATE;
         struct action_repeat_rate *action = ALLOC(struct action_repeat_rate);
@@ -466,6 +507,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_int(word, &action->rate)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
@@ -477,13 +519,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_int(word, &action->delay)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "keymap") == 0) {
         *out_type = ACTION_TYPE_KEYMAP;
         struct action_keymap *action = ALLOC(struct action_keymap);
@@ -494,6 +537,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         action->xkb_layouts = strdup(word);
 
         if(!shell_parser_pop(parser, sizeof(word), word)) {
@@ -501,6 +545,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         action->xkb_variants = strdup(word);
 
         if(!shell_parser_pop(parser, sizeof(word), word)) {
@@ -508,9 +553,10 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
-        action->xkb_options = strdup(word);
-        return true;
 
+        action->xkb_options = strdup(word);
+
+        return true;
     } else if(strcmp(word, "trackpad_disable_while_typing") == 0) {
         *out_type = ACTION_TYPE_TRACKPAD_DISABLE_WHILE_TYPING;
         struct action_trackpad_dwt *action = ALLOC(struct action_trackpad_dwt);
@@ -521,13 +567,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_bool(word, &action->enable)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "trackpad_tap_to_click") == 0) {
         *out_type = ACTION_TYPE_TRACKPAD_TAP_TO_CLICK;
         struct action_trackpad_tap_to_click *action = ALLOC(struct action_trackpad_tap_to_click);
@@ -538,13 +585,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_bool(word, &action->enable)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "trackpad_natural_scroll") == 0) {
         *out_type = ACTION_TYPE_TRACKPAD_NATURAL_SCROLL;
         struct action_trackpad_natural_scroll *action = ALLOC(struct action_trackpad_natural_scroll);
@@ -555,13 +603,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_bool(word, &action->enable)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "trackpad_scroll_method") == 0) {
         *out_type = ACTION_TYPE_TRACKPAD_SCROLL_METHOD;
         struct action_trackpad_scroll_method *action = ALLOC(struct action_trackpad_scroll_method);
@@ -572,13 +621,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_scroll_method(word, &action->value)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "cursor_theme") == 0) {
         *out_type = ACTION_TYPE_CURSOR_THEME;
         struct action_cursor_theme *action = ALLOC(struct action_cursor_theme);
@@ -589,6 +639,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         action->theme = strdup(word);
 
         if(!shell_parser_pop(parser, sizeof(word), word)) {
@@ -596,13 +647,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_int(word, &action->size)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "cursor_warp") == 0) {
         *out_type = ACTION_TYPE_CURSOR_WARP;
         struct action_cursor_warp *action = ALLOC(struct action_cursor_warp);
@@ -613,13 +665,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
-        if(!parse_bool(word, &action->enable)) {
+
+        if(!parse_cursor_warp(word, &action->value)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "cursor_hide_after_ms") == 0) {
         *out_type = ACTION_TYPE_CURSOR_HIDE_AFTER_MS;
         struct action_cursor_hide_after_ms *action = ALLOC(struct action_cursor_hide_after_ms);
@@ -630,13 +683,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_int(word, &action->value)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "gaps") == 0) {
         *out_type = ACTION_TYPE_GAPS;
         struct action_gaps *action = ALLOC(struct action_gaps);
@@ -647,6 +701,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_int(word, &action->outer)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
@@ -663,8 +718,8 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             // if only a single one is provided we set it for both
             action->inner = action->outer;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "smart_gaps") == 0) {
         *out_type = ACTION_TYPE_SMART_GAPS;
         struct action_smart_gaps *action = ALLOC(struct action_smart_gaps);
@@ -675,13 +730,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_bool(word, &action->enable)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "border_width") == 0) {
         *out_type = ACTION_TYPE_BORDER_WIDTH;
         struct action_border_width *action = ALLOC(struct action_border_width);
@@ -692,13 +748,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
+
         if(!parse_int(word, &action->value)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "border_color") == 0) {
         *out_type = ACTION_TYPE_BORDER_COLOR;
         struct action_border_color *action = ALLOC(struct action_border_color);
@@ -726,8 +783,8 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             // both the same
             action->inactive = action->active;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "master_ratio") == 0) {
         *out_type = ACTION_TYPE_MASTER_RATIO;
         struct action_master_ratio *action = ALLOC(struct action_master_ratio);
@@ -747,13 +804,14 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
                 return false;
             }
         }
+
         if(!parse_float(word, &action->value)) {
             action_destroy(*out_type, *dest);
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "client_side_decorations") == 0) {
         *out_type = ACTION_TYPE_CLIENT_SIDE_DECORATIONS;
         struct action_csd *action = ALLOC(struct action_csd);
@@ -769,8 +827,8 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
             *dest = NULL;
             return false;
         }
-        return true;
 
+        return true;
     } else if(strcmp(word, "pointer_rule") == 0) {
         *out_type = ACTION_TYPE_POINTER_RULE;
         struct pointer_rule *rule = ALLOC(struct pointer_rule);
@@ -1018,7 +1076,7 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         *dest = keybind;
 
         // NOTE: unlike for other actions, since the `keybind` object is long-lived, `action_destroy()` does not
-        // destrot it, so we do that here manually with `FREE()`
+        // destroy it, so we do that here manually with `FREE()`
         if(!shell_parser_pop(parser, sizeof(word), word)) {
             FREE(keybind);
             *dest = NULL;

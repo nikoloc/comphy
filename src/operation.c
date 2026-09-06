@@ -92,8 +92,8 @@ insert_layout_at_cursor(struct state *state, struct toplevel *toplevel) {
     if(wlr_box_contains_point(&box, x, y)) {
         // we are on top of master, check left or right
         if(x < box.x + box.width / 2) {
-            // left, insert as mastter
-            wl_list_insert(&workspace->slaves, &workspace->master->link);
+            // left, insert as master
+            wl_list_insert(workspace->slaves.prev, &workspace->master->link);
             workspace->master = toplevel;
         } else {
             // as slave

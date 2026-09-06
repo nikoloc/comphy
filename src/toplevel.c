@@ -214,7 +214,9 @@ handle_map(struct wl_listener *listener, void *data) {
                 center_float(toplevel);
             }
 
-            // here we dont need the extra configure, just commit the state as is
+            // here we dont need the extra configure, just commit the state as is, tho we need to set the border
+            // explicitly then
+            toplevel->has_border = true;
             transaction_commit(state, toplevel);
             break;
         }
@@ -224,7 +226,7 @@ handle_map(struct wl_listener *listener, void *data) {
         }
     }
 
-    toplevel_focus(state, toplevel, true);
+    toplevel_focus(state, toplevel, false);
 }
 
 static struct toplevel *
@@ -401,7 +403,7 @@ handle_commit(struct wl_listener *listener, void *data) {
         wlr_xdg_toplevel_set_size(toplevel->wlr_toplevel, width, height);
         wlr_xdg_toplevel_set_wm_capabilities(toplevel->wlr_toplevel, WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN);
         if(toplevel->state == TOPLEVEL_STATE_TILED) {
-            // send hacks
+            set_hacks(toplevel);
         }
         return;
     }
@@ -618,21 +620,49 @@ toplevel_create(struct state *state, struct wlr_xdg_toplevel *wlr_toplevel) {
     return toplevel;
 }
 
+static void
+warp_cursor(struct state *state, struct toplevel *toplevel) {
+    if(toplevel->transaction_state == TRANSACTION_STATE_CLEAN) {
+        cursor_warp_toplevel(state, toplevel);
+    } else {
+        // mark it so when the transaction commits the cursor is warped
+        state->warp_on_transaction = toplevel;
+        transaction_schedule_commit(state, toplevel->workspace);
+    }
+}
+
+static void
+warp_on_focus(struct state *state, struct toplevel *toplevel, struct toplevel *prev) {
+    switch(state->config.cursor.warp) {
+        case CURSOR_WARP_NEVER: {
+            break;
+        }
+        case CURSOR_WARP_ON_OUTPUT_CHANGE: {
+            struct output *output = prev ? prev->workspace->output : cursor_get_output(state);
+
+            if(toplevel->workspace->output != output) {
+                warp_cursor(state, toplevel);
+            }
+
+            break;
+        }
+        case CURSOR_WARP_ALWAYS: {
+            warp_cursor(state, toplevel);
+
+            break;
+        }
+    }
+}
+
 void
 toplevel_focus(struct state *state, struct toplevel *toplevel, bool warp) {
-    if(state->lock_mgr.lock || state->focused_lock || state->is_exclusive ||
+    if(state->lock_mgr.lock || state->is_exclusive || toplevel == state->focused_toplevel ||
             (state->grabbed_toplevel && toplevel != state->grabbed_toplevel) ||
             (toplevel && toplevel->workspace->fullscreen && toplevel != toplevel->workspace->fullscreen)) {
         return;
     }
 
-    // TODO: instead add a view_unfocus_current() that should be called in every focus request
     struct toplevel *prev = state->focused_toplevel;
-    if(prev == toplevel) {
-        // already focused
-        return;
-    }
-
     if(prev) {
         // unfocus it
         wlr_xdg_toplevel_set_activated(prev->wlr_toplevel, false);
@@ -647,6 +677,8 @@ toplevel_focus(struct state *state, struct toplevel *toplevel, bool warp) {
         return;
     }
 
+    workspace_set_active(state, toplevel->workspace, true);
+
     wlr_xdg_toplevel_set_activated(toplevel->wlr_toplevel, true);
     wlr_foreign_toplevel_handle_v1_set_activated(toplevel->foreign_toplevel_handle, true);
     toplevel_set_border_color(toplevel, state->config.border.color.active);
@@ -657,19 +689,36 @@ toplevel_focus(struct state *state, struct toplevel *toplevel, bool warp) {
                 keyboard->num_keycodes, &keyboard->modifiers);
     }
 
-    if(warp && state->config.cursor.warp) {
-        if(toplevel->transaction_state == TRANSACTION_STATE_CLEAN) {
-            cursor_warp_toplevel(state, toplevel);
-        } else {
-            // mark it so when the transaction commits the cursor is warped
-            state->warp_on_transaction = toplevel;
-            transaction_schedule_commit(state, toplevel->workspace);
+    if(warp) {
+        warp_on_focus(state, toplevel, prev);
+    }
+}
+
+static void
+warp_on_move(struct state *state, struct toplevel *toplevel, struct workspace *new, struct workspace *old) {
+    switch(state->config.cursor.warp) {
+        case CURSOR_WARP_NEVER: {
+            break;
+        }
+        case CURSOR_WARP_ON_OUTPUT_CHANGE: {
+            if(new->output != old->output && (!new->fullscreen || toplevel == new->fullscreen)) {
+                warp_cursor(state, toplevel);
+            }
+
+            break;
+        }
+        case CURSOR_WARP_ALWAYS: {
+            if(!new->fullscreen || toplevel == new->fullscreen) {
+                warp_cursor(state, toplevel);
+            }
+
+            break;
         }
     }
 }
 
 void
-toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace) {
+toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace, bool warp) {
     if(toplevel == state->grabbed_toplevel || toplevel->workspace == workspace) {
         return;
     }
@@ -723,7 +772,10 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
         }
     }
 
-    workspace_set_active(state, workspace, true);
+    workspace_set_active(state, workspace, !workspace->fullscreen);
+    if(warp) {
+        warp_on_move(state, toplevel, workspace, old_workspace);
+    }
 }
 
 u32

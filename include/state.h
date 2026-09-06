@@ -6,6 +6,7 @@
 #include "ctl.h"
 #include "cursor.h"
 #include "decoration.h"
+#include "ext_workspace.h"
 #include "gamma_control.h"
 #include "layer_shell.h"
 #include "lock.h"
@@ -35,6 +36,8 @@ struct state {
     struct cursor cursor;
     struct lock_mgr lock_mgr;
     struct gamma_control gamma_control;
+    struct ext_workspace_mgr ext_workspace_mgr;
+
     struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_manager;
 
     struct wl_list pointers;

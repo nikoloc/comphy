@@ -6,6 +6,7 @@
 #include <string.h>
 #include <wayland-util.h>
 #include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_ext_workspace_v1.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_subcompositor.h>
@@ -22,13 +23,19 @@
 #include "workspace.h"
 
 static inline void
-update_area(struct output *output) {
+update_area(struct state *state, struct output *output) {
+    int width, height;
+    wlr_output_effective_resolution(output->wlr_output, &width, &height);
+
     output->full_area = (struct wlr_box){
-            output->output_layout_output->x,
-            output->output_layout_output->y,
-            output->wlr_output->width,
-            output->wlr_output->height,
+            .x = output->output_layout_output->x,
+            .y = output->output_layout_output->y,
+            .width = width,
+            .height = height,
     };
+
+    output->usable_area = output->full_area;
+    layers_arrange(state, output);
 }
 
 static inline bool
@@ -88,7 +95,9 @@ modeset(struct output *output, int width, int height, int refresh, float scale) 
     struct wlr_output_state state;
     wlr_output_state_init(&state);
     wlr_output_state_set_enabled(&state, true);
-    wlr_output_state_set_scale(&state, scale);
+    if(scale > 0) {
+        wlr_output_state_set_scale(&state, scale);
+    }
     if(mode) {
         wlr_log(WLR_INFO, "modesetting output '%s' to %dx%d@%dmHz", output->wlr_output->name, mode->width, mode->height,
                 mode->refresh);
@@ -126,7 +135,7 @@ handle_request_state(struct wl_listener *listener, void *data) {
     wlr_log(WLR_DEBUG, "request state event for output '%s':", output->wlr_output->name);
     wlr_output_commit_state(output->wlr_output, request_state->state);
 
-    update_area(output);
+    update_area(state, output);
     layers_arrange_all(state);
 }
 
@@ -187,6 +196,8 @@ handle_destroy(struct wl_listener *listener, void *data) {
         wlr_scene_node_destroy(&output->lock_rect->node);
     }
 
+    wlr_ext_workspace_group_handle_v1_destroy(output->ext_workspace_group);
+
     wl_list_remove(&output->frame.link);
     wl_list_remove(&output->request_state.link);
     wl_list_remove(&output->destroy.link);
@@ -213,9 +224,12 @@ create_config(struct state *state, const char *name, struct output_rule *config)
 
         if(iter->fields & OUTPUT_RULE_FIELD_X) {
             config->x = iter->x;
+            // we only care if these are specified since not specifying them means to add it to the layout automatically
+            config->fields |= OUTPUT_RULE_FIELD_X;
         }
         if(iter->fields & OUTPUT_RULE_FIELD_Y) {
             config->y = iter->y;
+            config->fields |= OUTPUT_RULE_FIELD_Y;
         }
         if(iter->fields & OUTPUT_RULE_FIELD_WIDTH) {
             config->width = iter->width;
@@ -238,9 +252,16 @@ output_configure_from_rules(struct state *state, struct output *output) {
     create_config(state, output->wlr_output->name, &config);
 
     modeset(output, config.width, config.height, config.refresh_rate, config.scale);
-    output->output_layout_output = wlr_output_layout_add(state->output_layout, output->wlr_output, config.x, config.y);
+    if(config.fields & OUTPUT_RULE_FIELD_X && config.fields & OUTPUT_RULE_FIELD_Y) {
+        wlr_log(WLR_INFO, "placing output '%s' at %d, %d", output->wlr_output->name, config.x, config.y);
+        output->output_layout_output =
+                wlr_output_layout_add(state->output_layout, output->wlr_output, config.x, config.y);
+    } else {
+        wlr_log(WLR_INFO, "placing output '%s' automatically", output->wlr_output->name);
+        output->output_layout_output = wlr_output_layout_add_auto(state->output_layout, output->wlr_output);
+    }
 
-    update_area(output);
+    update_area(state, output);
 }
 
 struct output *
@@ -249,21 +270,19 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
     output->wlr_output = wlr_output;
     wlr_output->data = output;
 
-    wlr_log(WLR_DEBUG, "new output '%s'", output->wlr_output->name);
+    wlr_log(WLR_DEBUG, "new output '%s'", wlr_output->name);
 
-    wlr_output_init_render(wlr_output, state->backend.allocator, state->backend.renderer);
-    output->scene_output = wlr_scene_output_create(state->scene.wlr_scene, wlr_output);
-
-    output_configure_from_rules(state, output);
-
-    // TODO: when locking
-    // output->lock_rect = wlr_scene_rect_create(&state->scene.wlr_scene->tree, 0, 0, (float[4]){0.0f, 0.0f,
-    // 0.0f, 1.0f}); wlr_scene_node_place_above(&output->session_lock_rect->node, &server.overlay_tree->node);
-    // wlr_scene_node_set_enabled(&output->session_lock_rect->node, server.mode == SERVER_MODE_LOCKED);
+    output->ext_workspace_group = wlr_ext_workspace_group_handle_v1_create(state->ext_workspace_mgr.wlr_mgr,
+            EXT_WORKSPACE_GROUP_HANDLE_V1_GROUP_CAPABILITIES_CREATE_WORKSPACE);
+    wlr_ext_workspace_group_handle_v1_output_enter(output->ext_workspace_group, wlr_output);
+    output->ext_workspace_group->data = output;
 
     // create the dummy workspace. TODO: find orphans when hotplugging
     wl_list_init(&output->workspaces);
-    output->dummy_workspace = workspace_create(state, output, 1);
+    output->dummy_workspace = workspace_create(state, output, -1);
+
+    // insert it into the global list
+    wl_list_insert(&state->outputs, &output->link);
 
     // initialize per output layers on this output
     wl_list_init(&output->layers.background);
@@ -271,8 +290,16 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
     wl_list_init(&output->layers.top);
     wl_list_init(&output->layers.overlay);
 
-    // insert it into the global list
-    wl_list_insert(&state->outputs, &output->link);
+    wlr_output_init_render(wlr_output, state->backend.allocator, state->backend.renderer);
+    output->scene_output = wlr_scene_output_create(state->scene.wlr_scene, wlr_output);
+
+    output_configure_from_rules(state, output);
+    wlr_scene_output_layout_add_output(state->scene.scene_layout, output->output_layout_output, output->scene_output);
+
+    // TODO: when locking
+    // output->lock_rect = wlr_scene_rect_create(&state->scene.wlr_scene->tree, 0, 0, (float[4]){0.0f, 0.0f,
+    // 0.0f, 1.0f}); wlr_scene_node_place_above(&output->session_lock_rect->node, &server.overlay_tree->node);
+    // wlr_scene_node_set_enabled(&output->session_lock_rect->node, server.mode == SERVER_MODE_LOCKED);
 
     output->frame.notify = handle_frame;
     wl_signal_add(&wlr_output->events.frame, &output->frame);
@@ -307,6 +334,8 @@ output_focus(struct state *state, struct output *output, bool warp) {
     }
 
     struct workspace *workspace = output->active_workspace;
+    state->active_workspace = workspace;
+
     if(workspace->fullscreen) {
         toplevel_focus(state, workspace->fullscreen, warp);
         return;
@@ -341,7 +370,7 @@ output_focus(struct state *state, struct output *output, bool warp) {
         }
     }
 
-    if(warp && state->config.cursor.warp) {
+    if(warp) {
         cursor_warp_output(state, output);
     }
 }

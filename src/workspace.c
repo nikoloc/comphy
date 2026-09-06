@@ -1,6 +1,7 @@
 #include "workspace.h"
 
 #include <assert.h>
+#include <wlr/types/wlr_ext_workspace_v1.h>
 #include <wlr/util/log.h>
 
 #include "list_helpers.h"
@@ -17,7 +18,12 @@ workspace_create(struct state *state, struct output *output, int idx) {
 
         workspace->idx = idx;
 
+        char buffer[8] = {0};
+        snprintf(buffer, sizeof(buffer), "%d", workspace->idx);
+        wlr_ext_workspace_handle_v1_set_name(workspace->ext_workspace, buffer);
+
         wlr_log(WLR_INFO, "replaced dummy workspace of output '%s' to workspace '%d'", output->wlr_output->name, idx);
+
         return workspace;
     }
 
@@ -32,6 +38,15 @@ workspace_create(struct state *state, struct output *output, int idx) {
     workspace->idx = idx;
     workspace->original_output_name = strdup(output->wlr_output->name);
 
+    char buffer[8] = {0};
+    snprintf(buffer, sizeof(buffer), "%d", workspace->idx);
+    workspace->ext_workspace = wlr_ext_workspace_handle_v1_create(state->ext_workspace_mgr.wlr_mgr, buffer,
+            EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE |
+                    EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_REMOVE);
+    wlr_ext_workspace_handle_v1_set_name(workspace->ext_workspace, buffer);
+    wlr_ext_workspace_handle_v1_set_group(workspace->ext_workspace, output->ext_workspace_group);
+    workspace->ext_workspace->data = workspace;
+
     wl_list_insert(&output->workspaces, &workspace->link);
 
     if(!output->active_workspace) {
@@ -40,6 +55,7 @@ workspace_create(struct state *state, struct output *output, int idx) {
 
     if(!state->active_workspace) {
         state->active_workspace = workspace;
+        wlr_ext_workspace_handle_v1_set_active(workspace->ext_workspace, true);
     }
 
     wlr_log(WLR_INFO, "created workspace for output '%s' indexed '%d'", output->wlr_output->name, idx);
@@ -128,7 +144,8 @@ workspace_set_active(struct state *state, struct workspace *workspace, bool keep
         return;
     }
 
-    struct output *old_output = state->active_workspace->output;
+    struct workspace *old_workspace = state->active_workspace;
+    struct output *old_output = old_workspace->output;
 
     state->active_workspace = workspace;
     workspace->output->active_workspace = workspace;
@@ -136,6 +153,9 @@ workspace_set_active(struct state *state, struct workspace *workspace, bool keep
     if(!keep_focus) {
         output_focus(state, workspace->output, workspace->output != old_output);
     }
+
+    wlr_ext_workspace_handle_v1_set_active(old_workspace->ext_workspace, false);
+    wlr_ext_workspace_handle_v1_set_active(workspace->ext_workspace, true);
 
     // commit on the transaction, tho we need to schedule one is the workspace is clean
     transaction_schedule_commit(state, workspace);
@@ -154,4 +174,14 @@ workspace_find_by_idx(struct state *state, int idx) {
     }
 
     return NULL;
+}
+
+bool
+workspace_is_presented(struct workspace *workspace) {
+    struct output *output = workspace->output;
+    if(!output) {
+        return false;
+    }
+
+    return output->presented_workspace == workspace;
 }

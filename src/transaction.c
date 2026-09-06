@@ -185,7 +185,7 @@ commit(struct state *state, struct toplevel *toplevel) {
         toplevel->current = toplevel->pending;
     }
 
-    // clip(state, toplevel);
+    clip(state, toplevel);
 
     if(toplevel->needs_reparenting) {
         reparent(state, toplevel);

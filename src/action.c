@@ -92,12 +92,9 @@ update_all_borders(struct state *state) {
 }
 
 static struct output *
-get_cross_output(struct state *state, struct toplevel *toplevel, enum wlr_direction direction) {
-    int x, y;
-    wlr_box_midpoint(&toplevel->current, &x, &y);
-
-    struct wlr_output *wlr_output = wlr_output_layout_adjacent_output(state->output_layout, direction,
-            toplevel->workspace->output->wlr_output, x, y);
+get_cross_output_from_point(struct state *state, struct output *output, enum wlr_direction direction, int x, int y) {
+    struct wlr_output *wlr_output =
+            wlr_output_layout_adjacent_output(state->output_layout, direction, output->wlr_output, x, y);
     if(!wlr_output) {
         return NULL;
     }
@@ -105,11 +102,35 @@ get_cross_output(struct state *state, struct toplevel *toplevel, enum wlr_direct
     return wlr_output->data;
 }
 
+static struct output *
+get_cross_output_from_toplevel(struct state *state, struct toplevel *toplevel, enum wlr_direction direction) {
+    int x, y;
+    wlr_box_midpoint(&toplevel->current, &x, &y);
+
+    return get_cross_output_from_point(state, toplevel->workspace->output, direction, x, y);
+}
+
+static struct output *
+get_cross_output_from_output(struct state *state, struct output *output, enum wlr_direction direction) {
+    int x, y;
+    wlr_box_midpoint(&output->full_area, &x, &y);
+
+    return get_cross_output_from_point(state, output, direction, x, y);
+}
+
 static void
-focus_cross_output(struct state *state, struct toplevel *toplevel, enum wlr_direction direction) {
-    struct output *output = get_cross_output(state, toplevel, direction);
+focus_cross_output_from_toplevel(struct state *state, struct toplevel *toplevel, enum wlr_direction direction) {
+    struct output *output = get_cross_output_from_toplevel(state, toplevel, direction);
     if(output) {
         output_focus(state, output, true);
+    }
+}
+
+static void
+focus_cross_output_from_output(struct state *state, struct output *output, enum wlr_direction direction) {
+    struct output *new_output = get_cross_output_from_output(state, output, direction);
+    if(new_output) {
+        output_focus(state, new_output, true);
     }
 }
 
@@ -169,7 +190,15 @@ find_in_direction(struct toplevel *toplevel, enum wlr_direction direction) {
 static void
 focus(struct state *state, enum wlr_direction direction) {
     struct toplevel *toplevel = state->focused_toplevel;
-    if(!toplevel || toplevel == state->grabbed_toplevel) {
+    if(!toplevel) {
+        // get the output and cross output
+        struct output *output = state->active_workspace->output;
+
+        focus_cross_output_from_output(state, output, direction);
+        return;
+    }
+
+    if(toplevel == state->grabbed_toplevel) {
         return;
     }
 
@@ -180,7 +209,7 @@ focus(struct state *state, enum wlr_direction direction) {
             if(focus_next) {
                 toplevel_focus(state, focus_next, true);
             } else {
-                focus_cross_output(state, toplevel, direction);
+                focus_cross_output_from_toplevel(state, toplevel, direction);
             }
 
             break;
@@ -189,11 +218,11 @@ focus(struct state *state, enum wlr_direction direction) {
             // for floats and fullscreened toplevels we just move focus across outputs; doing anything else just does
             // not seem worth the work tbh as any other way of doing would not feed any more natural and would need more
             // work
-            focus_cross_output(state, toplevel, direction);
+            focus_cross_output_from_toplevel(state, toplevel, direction);
             break;
         }
         case TOPLEVEL_STATE_FULLSCREEN: {
-            focus_cross_output(state, toplevel, direction);
+            focus_cross_output_from_toplevel(state, toplevel, direction);
             break;
         }
     }
@@ -201,9 +230,9 @@ focus(struct state *state, enum wlr_direction direction) {
 
 static void
 move_cross_output(struct state *state, struct toplevel *toplevel, enum wlr_direction direction) {
-    struct output *output = get_cross_output(state, toplevel, direction);
+    struct output *output = get_cross_output_from_toplevel(state, toplevel, direction);
     if(output) {
-        toplevel_move_to_workspace(state, toplevel, output->active_workspace);
+        toplevel_move_to_workspace(state, toplevel, output->active_workspace, true);
     }
 }
 
@@ -312,7 +341,7 @@ action_perform(struct state *state, enum action_type type, void *_action) {
 
             struct workspace *workspace = workspace_find_by_idx(state, action->idx);
             if(workspace) {
-                toplevel_move_to_workspace(state, state->focused_toplevel, workspace);
+                toplevel_move_to_workspace(state, state->focused_toplevel, workspace, true);
             }
             break;
         }
@@ -482,12 +511,14 @@ action_perform(struct state *state, enum action_type type, void *_action) {
         }
         case ACTION_TYPE_CURSOR_WARP: {
             struct action_cursor_warp *action = _action;
-            state->config.cursor.warp = action->enable;
+            state->config.cursor.warp = action->value;
             break;
         }
         case ACTION_TYPE_CURSOR_HIDE_AFTER_MS: {
             struct action_cursor_hide_after_ms *action = _action;
             state->config.cursor.hide_after_ms = action->value;
+
+            cursor_reset_idle(state);
             break;
         }
         case ACTION_TYPE_GAPS: {

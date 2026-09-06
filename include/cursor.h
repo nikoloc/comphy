@@ -13,6 +13,8 @@ struct cursor {
     struct wlr_cursor *wlr_cursor;
     struct wlr_xcursor_manager *xcursor_mgr;
 
+    struct wl_event_source *idle_timer;
+
     struct wl_listener motion;
     struct wl_listener motion_absolute;
     struct wl_listener button;
@@ -52,5 +54,8 @@ cursor_warp_toplevel(struct state *state, struct toplevel *toplevel);
 
 void
 cursor_warp_layer(struct state *state, struct layer *layer);
+
+void
+cursor_reset_idle(struct state *state);
 
 #endif

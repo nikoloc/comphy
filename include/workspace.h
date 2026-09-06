@@ -2,8 +2,8 @@
 #define WORKSPACE_H
 
 #include <wayland-server-protocol.h>
+#include <wlr/types/wlr_ext_workspace_v1.h>
 
-#include "config.h"
 #include "output.h"
 #include "toplevel.h"
 
@@ -18,6 +18,8 @@ struct workspace {
     struct toplevel *master;
     struct wl_list slaves, floats;
     struct toplevel *fullscreen;
+
+    struct wlr_ext_workspace_handle_v1 *ext_workspace;
 
     bool has_dirty;
     struct wl_event_source *transaction_time_out;
@@ -43,5 +45,8 @@ workspace_show_toplevels(struct workspace *workspace, bool show);
 
 struct workspace *
 workspace_find_by_idx(struct state *state, int idx);
+
+bool
+workspace_is_presented(struct workspace *workspace);
 
 #endif

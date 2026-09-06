@@ -110,8 +110,14 @@ struct action_cursor_theme {
     int size;
 };
 
+enum cursor_warp {
+    CURSOR_WARP_NEVER = 0,
+    CURSOR_WARP_ON_OUTPUT_CHANGE,
+    CURSOR_WARP_ALWAYS,
+};
+
 struct action_cursor_warp {
-    bool enable;
+    enum cursor_warp value;
 };
 
 struct action_cursor_hide_after_ms {

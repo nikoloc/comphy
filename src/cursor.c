@@ -10,11 +10,13 @@
 #include "util/macros.h"
 #include "util/time_util.h"
 #include "view.h"
+#include "workspace.h"
 
 void
 cursor_set_image(struct state *state, char *image) {
     if(state->cursor.xcursor_mgr) {
         wlr_cursor_set_xcursor(state->cursor.wlr_cursor, state->cursor.xcursor_mgr, image);
+        cursor_reset_idle(state);
     }
 }
 
@@ -63,6 +65,10 @@ handle_motion_shared(struct state *state, u32 time) {
     // get the output that the cursor is on currently
     struct wlr_output *wlr_output =
             wlr_output_layout_output_at(state->output_layout, state->cursor.wlr_cursor->x, state->cursor.wlr_cursor->y);
+    if(!wlr_output) {
+        return;
+    }
+
     struct output *output = wlr_output->data;
 
     // switch the active workspace if cross monitor
@@ -74,7 +80,11 @@ handle_motion_shared(struct state *state, u32 time) {
     }
 
     // finally, handle pointer focus
-    cursor_focus(state, time, true);
+    if(state->active_workspace && workspace_is_presented(state->active_workspace)) {
+        cursor_focus(state, time, true);
+    }
+
+    cursor_reset_idle(state);
 }
 
 static void
@@ -164,6 +174,8 @@ handle_button(struct wl_listener *listener, void *data) {
         // else notify the client with pointer focus that a button press has occurred
         wlr_seat_pointer_notify_button(state->seat.wlr_seat, event->time_msec, event->button, event->state);
     }
+
+    cursor_reset_idle(state);
 }
 
 static void
@@ -174,6 +186,8 @@ handle_axis(struct wl_listener *listener, void *data) {
 
     wlr_seat_pointer_notify_axis(state->seat.wlr_seat, event->time_msec, event->orientation, event->delta,
             event->delta_discrete, event->source, event->relative_direction);
+
+    cursor_reset_idle(state);
 }
 
 static void
@@ -220,6 +234,20 @@ cursor_set_theme(struct cursor *cursor, char *theme, int size) {
     setenv("XCURSOR_THEME", theme, true);
 }
 
+static int
+idle_timer(void *data) {
+    UNUSED(data);
+
+    struct state *state = state_get();
+    wlr_cursor_set_surface(state->cursor.wlr_cursor, NULL, 0, 0);
+
+    // make sure to clear the focus now; otherwise when the timer resets the client want know it needs to provide
+    // another image for it
+    wlr_seat_pointer_clear_focus(state->seat.wlr_seat);
+
+    return 0;
+}
+
 void
 cursor_init(struct cursor *cursor, struct wlr_output_layout *output_layout) {
     cursor->wlr_cursor = wlr_cursor_create();
@@ -247,6 +275,9 @@ cursor_init(struct cursor *cursor, struct wlr_output_layout *output_layout) {
 
     cursor->request_set_shape.notify = handle_request_set_shape;
     wl_signal_add(&cursor->cursor_shape_manager->events.request_set_shape, &cursor->request_set_shape);
+
+    struct wl_event_loop *loop = wl_display_get_event_loop(output_layout->display);
+    cursor->idle_timer = wl_event_loop_add_timer(loop, idle_timer, NULL);
 }
 
 void
@@ -284,6 +315,8 @@ cursor_warp_output(struct state *state, struct output *output) {
     wlr_cursor_warp(state->cursor.wlr_cursor, NULL, output->full_area.x + output->full_area.width / 2.0f,
             output->full_area.y + output->full_area.height / 2.0);
     cursor_focus(state, time_now_ms(), false);
+
+    cursor_reset_idle(state);
 }
 
 void
@@ -291,6 +324,8 @@ cursor_warp_toplevel(struct state *state, struct toplevel *toplevel) {
     wlr_cursor_warp(state->cursor.wlr_cursor, NULL, toplevel->current.x + toplevel->current.width / 2.0f,
             toplevel->current.y + toplevel->current.height / 2.0);
     cursor_focus(state, time_now_ms(), false);
+
+    cursor_reset_idle(state);
 }
 
 void
@@ -302,4 +337,13 @@ cursor_warp_layer(struct state *state, struct layer *layer) {
 
     wlr_cursor_warp(state->cursor.wlr_cursor, NULL, x + width / 2.0f, y + height / 2.0f);
     cursor_focus(state, time_now_ms(), false);
+
+    cursor_reset_idle(state);
+}
+
+void
+cursor_reset_idle(struct state *state) {
+    if(state->config.cursor.hide_after_ms > 0) {
+        wl_event_source_timer_update(state->cursor.idle_timer, state->config.cursor.hide_after_ms);
+    }
 }

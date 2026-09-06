@@ -33,8 +33,6 @@
 #include "seat.h"
 #include "state.h"
 #include "system.h"
-#define DSTRING_IMPLEMENTATION
-#include "util/dstring.h"
 #include "util/macros.h"
 
 static void
@@ -135,6 +133,7 @@ main(int argc, char **argv) {
     lock_mgr_init(&state->lock_mgr, state->display);
     decoration_init(&state->decoration, state->display);
     gamma_control_init(&state->gamma_control, state->display);
+    ext_workspace_mgr_init(&state->ext_workspace_mgr, state->display);
 
     state->foreign_toplevel_manager = wlr_foreign_toplevel_manager_v1_create(state->display);
 
@@ -200,6 +199,7 @@ cleanup:
     lock_mgr_deinit(&state->lock_mgr);
     decoration_deinit(&state->decoration);
     gamma_control_deinit(&state->gamma_control);
+    ext_workspace_mgr_deinit(&state->ext_workspace_mgr);
     backend_deinit(&state->backend);
 config:
     config_deinit(&state->config);

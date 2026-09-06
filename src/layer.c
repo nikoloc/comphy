@@ -254,7 +254,7 @@ layer_focus(struct state *state, struct layer *layer, bool warp) {
                 keyboard->num_keycodes, &keyboard->modifiers);
     }
 
-    if(warp && state->config.cursor.warp) {
+    if(warp) {
         cursor_warp_layer(state, layer);
     }
 }

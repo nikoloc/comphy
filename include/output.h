@@ -30,6 +30,8 @@ struct output {
 
     struct wlr_scene_rect *lock_rect;
 
+    struct wlr_ext_workspace_group_handle_v1 *ext_workspace_group;
+
     struct wl_listener frame;
     struct wl_listener request_state;
     struct wl_listener destroy;
