@@ -396,10 +396,6 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             }
             break;
         }
-        case ACTION_TYPE_TOGGLE_FAKE_FULLSCREEN: {
-            // TODO
-            break;
-        }
         case ACTION_TYPE_START_MOVE: {
             enum view *pointer_focused = seat_get_pointer_focused(state);
             if(!pointer_focused) {

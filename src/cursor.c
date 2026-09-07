@@ -241,9 +241,7 @@ idle_timer(void *data) {
     struct state *state = state_get();
     wlr_cursor_set_surface(state->cursor.wlr_cursor, NULL, 0, 0);
 
-    // make sure to clear the focus now; otherwise when the timer resets the client want know it needs to provide
-    // another image for it
-    wlr_seat_pointer_clear_focus(state->seat.wlr_seat);
+    state->cursor.is_hidden = true;
 
     return 0;
 }
@@ -343,6 +341,14 @@ cursor_warp_layer(struct state *state, struct layer *layer) {
 
 void
 cursor_reset_idle(struct state *state) {
+    if(state->cursor.is_hidden) {
+        // clear the focus and immediatelly give it back; this causes the client to set a new cursor image
+        wlr_seat_pointer_clear_focus(state->seat.wlr_seat);
+        cursor_focus(state, time_now_ms(), false);
+        state->cursor.is_hidden = false;
+    }
+
+    // update the timer
     if(state->config.cursor.hide_after_ms > 0) {
         wl_event_source_timer_update(state->cursor.idle_timer, state->config.cursor.hide_after_ms);
     }

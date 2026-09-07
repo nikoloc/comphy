@@ -9,7 +9,6 @@ close
 exit
 toggle_float
 toggle_fullscreen
-toggle_fake_fullscreen
 start_move
 start_resize
 

@@ -14,6 +14,7 @@ struct cursor {
     struct wlr_xcursor_manager *xcursor_mgr;
 
     struct wl_event_source *idle_timer;
+    bool is_hidden;
 
     struct wl_listener motion;
     struct wl_listener motion_absolute;

@@ -64,9 +64,6 @@ action_destroy(enum action_type type, void *_action) {
         case ACTION_TYPE_TOGGLE_FULLSCREEN: {
             break;
         }
-        case ACTION_TYPE_TOGGLE_FAKE_FULLSCREEN: {
-            break;
-        }
         case ACTION_TYPE_START_MOVE: {
             break;
         }
@@ -479,11 +476,6 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         return true;
     } else if(strcmp(word, "toggle_fullscreen") == 0) {
         *out_type = ACTION_TYPE_TOGGLE_FULLSCREEN;
-        *dest = NULL;
-
-        return true;
-    } else if(strcmp(word, "toggle_fake_fullscreen") == 0) {
-        *out_type = ACTION_TYPE_TOGGLE_FAKE_FULLSCREEN;
         *dest = NULL;
 
         return true;
