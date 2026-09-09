@@ -11,6 +11,7 @@
 
 enum action_type {
     ACTION_TYPE_CREATE_WORKSPACE = 1,
+    ACTION_TYPE_DESTROY_WORKSPACE,
     ACTION_TYPE_CHANGE_WORKSPACE,
     ACTION_TYPE_MOVE_TO_WORKSPACE,
     ACTION_TYPE_FOCUS,
@@ -48,6 +49,10 @@ enum action_type {
 
 struct action_create_workspace {
     char *output;
+    int idx;
+};
+
+struct action_destroy_workspace {
     int idx;
 };
 

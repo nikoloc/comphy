@@ -696,7 +696,7 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
         }
         case TOPLEVEL_STATE_FULLSCREEN: {
             if(workspace->fullscreen) {
-                return;
+                // TODO: handle unsetting this one
             }
 
             old_workspace->fullscreen = NULL;
@@ -708,8 +708,6 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
             break;
         }
     }
-
-    workspace_set_active(state, workspace, !workspace->fullscreen);
 }
 
 u32

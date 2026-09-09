@@ -38,6 +38,7 @@ workspace_create(struct state *state, struct output *output, int idx) {
     workspace->idx = idx;
     workspace->original_output_name = strdup(output->wlr_output->name);
 
+    // init ext workspace handle
     char buffer[8] = {0};
     snprintf(buffer, sizeof(buffer), "%d", workspace->idx);
     workspace->ext_workspace = wlr_ext_workspace_handle_v1_create(state->ext_workspace_mgr.wlr_mgr, buffer,
@@ -65,26 +66,79 @@ workspace_create(struct state *state, struct output *output, int idx) {
 
 static struct workspace *
 find_next_on_output(struct state *state, struct workspace *workspace) {
+    UNUSED(state);
+
     struct output *output = workspace->output;
     struct wl_list *next = wl_list_next_or_prev(&output->workspaces, &workspace->link);
     if(!next) {
-        return NULL;
+        // create a new dummy
+        wlr_log(WLR_INFO, "output '%s' left with no workspaces, creating dummy", workspace->output->wlr_output->name);
+        output->dummy_workspace = workspace_create(state, output, -1);
+        return output->dummy_workspace;
     }
 
     return CONTAINER_OF(next, struct workspace, link);
 }
 
+static void
+evacuate(struct state *state, struct workspace *workspace, struct workspace *next) {
+    // evacuate toplevels
+    if(workspace->fullscreen) {
+        toplevel_move_to_workspace(state, workspace->fullscreen, next);
+    }
+
+    struct toplevel *iter, *tmp;
+    wl_list_for_each_safe(iter, tmp, &workspace->floats, link) {
+        toplevel_move_to_workspace(state, iter, next);
+    }
+
+    wl_list_for_each_safe(iter, tmp, &workspace->slaves, link) {
+        toplevel_move_to_workspace(state, iter, next);
+    }
+
+    if(workspace->master) {
+        toplevel_move_to_workspace(state, workspace->master, next);
+    }
+}
+
 void
-workspace_destroy(struct state *state, struct workspace *workspace) {
-    if(workspace == workspace->output->active_workspace) {
-        struct workspace *next = find_next_on_output(state, workspace);
-        if(!next) {
-            wlr_log(WLR_INFO, "output '%s' left with no workspaces", workspace->output->wlr_output->name);
+workspace_destroy(struct state *state, struct workspace *workspace, bool output_is_destroying) {
+    struct output *output = workspace->output;
+
+    struct workspace *next = NULL;
+    if(!output_is_destroying) {
+        next = find_next_on_output(state, workspace);
+
+        if(workspace == output->active_workspace) {
+            output->active_workspace = next;
+        }
+    } else {
+        struct wl_list *next_output_link = wl_list_next_or_prev(&state->outputs, &output->link);
+        if(next_output_link) {
+            struct output *output = CONTAINER_OF(next_output_link, struct output, link);
+            next = CONTAINER_OF(output->workspaces.next, struct workspace, link);
         }
     }
 
-    if(workspace == state->active_workspace) {
-        // TODO: find new workspace to set as active
+    if(next) {
+        wlr_log(WLR_DEBUG, "found next workspace to evacuate and focus '%d'", next->idx);
+
+        evacuate(state, workspace, next);
+        if(workspace == state->active_workspace) {
+            // also set it as global active
+            workspace_set_active(state, next, false);
+        }
+    } else {
+        wlr_log(WLR_INFO, "no outputs left");
+        // TODO: handle no outputs
+    }
+
+    wl_list_remove(&workspace->link);
+
+    wlr_ext_workspace_handle_v1_destroy(workspace->ext_workspace);
+
+    if(workspace == output->presented_workspace) {
+        output->presented_workspace = NULL;
     }
 
     if(workspace->transaction_time_out) {
@@ -95,16 +149,7 @@ workspace_destroy(struct state *state, struct workspace *workspace) {
         wl_event_source_remove(workspace->transaction_schedule);
     }
 
-    struct toplevel *iter, *tmp;
-    wl_list_for_each_safe(iter, tmp, &workspace->ghosts, link) {
-        toplevel_finalize_destroy(iter);
-    }
-
-    // TODO: evacuate toplevels and check if layers need some work
-
     FREE(workspace->original_output_name);
-
-    wl_list_remove(&workspace->link);
     FREE(workspace);
 }
 
@@ -119,10 +164,6 @@ workspace_show_toplevels(struct workspace *workspace, bool show) {
     }
 
     struct toplevel *iter;
-    wl_list_for_each(iter, &workspace->floats, link) {
-        wlr_scene_node_set_enabled(&iter->scene_tree->node, show);
-    }
-
     wl_list_for_each(iter, &workspace->slaves, link) {
         wlr_scene_node_set_enabled(&iter->scene_tree->node, show);
     }
@@ -145,7 +186,6 @@ workspace_set_active(struct state *state, struct workspace *workspace, bool keep
     }
 
     struct workspace *old_workspace = state->active_workspace;
-    struct output *old_output = old_workspace->output;
 
     state->active_workspace = workspace;
     workspace->output->active_workspace = workspace;

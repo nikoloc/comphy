@@ -40,7 +40,10 @@ handle_request(struct state *state, struct wlr_ext_workspace_v1_request *request
             break;
         }
         case WLR_EXT_WORKSPACE_V1_REQUEST_REMOVE: {
-            // TODO: when remove workspace api
+            struct workspace *workspace = request->remove.workspace->data;
+            ASSERT(workspace);
+
+            workspace_destroy(state, workspace, false);
             break;
         }
     }

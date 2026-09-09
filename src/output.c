@@ -168,26 +168,9 @@ handle_destroy(struct wl_listener *listener, void *data) {
 
     wlr_log(WLR_DEBUG, "destroying output '%s'", output->wlr_output->name);
 
-    struct wl_list *next = wl_list_next_or_prev(&state->outputs, &output->link);
-    if(next) {
-        struct output *next_output = CONTAINER_OF(next, struct output, link);
-        // TODO: orphans
-        // struct workspace *w, *tmp;
-        // wl_list_for_each_safe(w, tmp, &output->workspaces, link) {
-        //     w->output = new;
-        //     wl_list_remove(&w->link);
-        //     wl_list_insert(&new->workspaces, &w->link);
-        //     layout_set_pending_state(w);
-        // }
-
-        enum view *view = view_get_focused(state);
-        if(view) {
-            struct output *focused_output = view_get_output(view);
-            if(focused_output == output) {
-                // if the focus is on this output move it elsewhere
-                output_focus(state, next_output);
-            }
-        }
+    struct workspace *iter, *tmp;
+    wl_list_for_each_safe(iter, tmp, &output->workspaces, link) {
+        workspace_destroy(state, iter, true);
     }
 
     destroy_layers(output);

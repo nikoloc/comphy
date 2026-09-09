@@ -323,6 +323,16 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             workspace_create(state, output, action->idx);
             break;
         }
+        case ACTION_TYPE_DESTROY_WORKSPACE: {
+            struct action_destroy_workspace *action = _action;
+
+            struct workspace *workspace = workspace_find_by_idx(state, action->idx);
+            if(workspace) {
+                operation_stop_whatever(state);
+                workspace_destroy(state, workspace, false);
+            }
+            break;
+        }
         case ACTION_TYPE_CHANGE_WORKSPACE: {
             struct action_change_workspace *action = _action;
 
@@ -342,6 +352,7 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             struct workspace *workspace = workspace_find_by_idx(state, action->idx);
             if(workspace) {
                 toplevel_move_to_workspace(state, state->focused_toplevel, workspace);
+                workspace_set_active(state, workspace, !workspace->fullscreen);
             }
             break;
         }

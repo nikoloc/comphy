@@ -233,7 +233,7 @@ show_workspace(struct state *state) {
 
     state->active_workspace->output->presented_workspace = workspace;
 
-    if(presented) {
+    if(presented && presented != workspace) {
         workspace_show_toplevels(presented, false);
     }
     workspace_show_toplevels(workspace, true);
@@ -267,7 +267,7 @@ commit_all(struct state *state, struct workspace *workspace) {
     remove_ghosts(workspace);
     workspace->has_dirty = false;
 
-    if(workspace == state->active_workspace && workspace != state->active_workspace->output->presented_workspace) {
+    if(workspace == state->active_workspace) {
         show_workspace(state);
     }
 }

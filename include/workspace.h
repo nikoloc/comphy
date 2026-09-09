@@ -35,7 +35,7 @@ struct workspace *
 workspace_create(struct state *state, struct output *output, int idx);
 
 void
-workspace_destroy(struct state *state, struct workspace *workspace);
+workspace_destroy(struct state *state, struct workspace *workspace, bool output_is_destroying);
 
 void
 workspace_set_active(struct state *state, struct workspace *workspace, bool keep_focus);

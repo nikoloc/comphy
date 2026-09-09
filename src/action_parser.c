@@ -29,6 +29,9 @@ action_destroy(enum action_type type, void *_action) {
             FREE(action->output);
             break;
         }
+        case ACTION_TYPE_DESTROY_WORKSPACE: {
+            break;
+        }
         case ACTION_TYPE_CHANGE_WORKSPACE: {
             break;
         }
@@ -319,6 +322,24 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
                 *dest = NULL;
                 return false;
             }
+        }
+
+        if(!parse_int(word, &action->idx)) {
+            action_destroy(*out_type, *dest);
+            *dest = NULL;
+            return false;
+        }
+
+        return true;
+    } else if(strcmp(word, "destroy_workspace") == 0) {
+        *out_type = ACTION_TYPE_DESTROY_WORKSPACE;
+        struct action_destroy_workspace *action = ALLOC(struct action_destroy_workspace);
+        *dest = action;
+
+        if(!shell_parser_pop(parser, sizeof(word), word)) {
+            action_destroy(*out_type, *dest);
+            *dest = NULL;
+            return false;
         }
 
         if(!parse_int(word, &action->idx)) {
