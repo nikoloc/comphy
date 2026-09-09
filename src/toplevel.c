@@ -82,7 +82,7 @@ default_state(struct state *state, struct toplevel *toplevel) {
 
 static void
 default_size(struct state *state, struct toplevel *toplevel, int *width, int *height) {
-    *width = 0, *height = 0;
+    *width = -1, *height = -1;
 
     struct toplevel_rule *iter;
     wl_list_for_each(iter, &state->config.toplevel_rules, link) {
@@ -189,15 +189,17 @@ handle_map(struct wl_listener *listener, void *data) {
     toplevel->border = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, color);
     wlr_scene_node_lower_to_bottom(&toplevel->border->node);
 
+    toplevel->state = default_state(state, toplevel);
+
     switch(toplevel->state) {
         case TOPLEVEL_STATE_TILED: {
+            set_hacks(toplevel);
+
             layout_add(workspace, toplevel);
             // immediately reconfigure the layout so the right size is sent to the client. NOTE: this is not ideal,
             // since we request another state from the client, but working around it creates a lot more work i am not
             // doing rn. current way needs disabling the node before the first transaction commit tho.
             layout_configure(state, workspace);
-            wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
-            toplevel->needs_initial_enable = true;
             break;
         }
         case TOPLEVEL_STATE_FLOAT: {
@@ -205,19 +207,28 @@ handle_map(struct wl_listener *listener, void *data) {
             // reparent the tree to floating global
             wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.floats);
 
-            // respect its choosen size
-            struct wlr_box *geometry = &toplevel->wlr_toplevel->base->geometry;
-            toplevel->pending.width = geometry->width;
-            toplevel->pending.height = geometry->height;
+            struct wlr_box box;
+            default_size(state, toplevel, &box.width, &box.height);
+            if(box.width > 0 && box.height > 0) {
+                // has the rule, send that size
+                toplevel->needs_centering = true;
+                toplevel_configure(state, toplevel, &box);
+            } else {
+                toplevel->has_border = should_have_border(state, toplevel);
+                // respect its choosen size
+                struct wlr_box *geometry = &toplevel->wlr_toplevel->base->geometry;
 
-            if(toplevel->needs_centering) {
+                toplevel->pending.width = geometry->width;
+                toplevel->pending.height = geometry->height;
+                if(toplevel->has_border) {
+                    toplevel->pending.width += 2 * state->config.border.width;
+                    toplevel->pending.height += 2 * state->config.border.width;
+                }
+
                 center_float(toplevel);
+                transaction_commit(state, toplevel);
             }
 
-            // here we dont need the extra configure, just commit the state as is, tho we need to set the border
-            // explicitly then
-            toplevel->has_border = true;
-            transaction_commit(state, toplevel);
             break;
         }
         default: {
@@ -381,16 +392,6 @@ handle_commit(struct wl_listener *listener, void *data) {
     }
 
     if(toplevel->wlr_toplevel->base->initial_commit) {
-        toplevel->state = default_state(state, toplevel);
-
-        // on initial commit we need to tell the client the initial size; we only do so if there are rules, elso we just
-        // tell it to choose its own size
-        int width = 0, height = 0;
-        if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
-            default_size(state, toplevel, &width, &height);
-            toplevel->needs_centering = true;
-        }
-
         if(state->active_workspace) {
             // if there is an output we try and guess this is going to be the output this toplevel is going to be
             // displayed on. this might change if the user changes the workspace for example, or for any other reason,
@@ -400,11 +401,8 @@ handle_commit(struct wl_listener *listener, void *data) {
             send_scale(toplevel, current_output->wlr_output->scale);
         }
 
-        wlr_xdg_toplevel_set_size(toplevel->wlr_toplevel, width, height);
+        wlr_xdg_toplevel_set_size(toplevel->wlr_toplevel, 0, 0);
         wlr_xdg_toplevel_set_wm_capabilities(toplevel->wlr_toplevel, WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN);
-        if(toplevel->state == TOPLEVEL_STATE_TILED) {
-            set_hacks(toplevel);
-        }
         return;
     }
 
@@ -581,6 +579,8 @@ toplevel_create(struct state *state, struct wlr_xdg_toplevel *wlr_toplevel) {
     toplevel->view = VIEW_TOPLEVEL;
     // we create the tree in the tiled tree, and swap it later if necessery
     toplevel->scene_tree = wlr_scene_tree_create(state->scene.trees.tiled);
+    wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
+    toplevel->needs_initial_enable = true;
     // in order to obtain this toplevel we keep a pointer to view, from which the type of view can be read, and then
     // extracted by using `CONTAINER_OF()`
     toplevel->scene_tree->node.data = &toplevel->view;

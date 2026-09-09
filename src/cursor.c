@@ -16,7 +16,6 @@ void
 cursor_set_image(struct state *state, char *image) {
     if(state->cursor.xcursor_mgr) {
         wlr_cursor_set_xcursor(state->cursor.wlr_cursor, state->cursor.xcursor_mgr, image);
-        cursor_reset_idle(state);
     }
 }
 
