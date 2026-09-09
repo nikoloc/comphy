@@ -61,12 +61,31 @@ handle_modifiers(struct wl_listener *listener, void *data) {
 }
 
 static bool
-handle_change_vt(struct state *state, int count, const xkb_keysym_t *keysyms) {
+handle_change_vt(struct state *state, struct keyboard *keyboard, u32 keycode) {
+    const xkb_keysym_t *syms;
+    int count = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
+
     // from `labwc`, thanks!
     for(int i = 0; i < count; i++) {
-        int vt = keysyms[i] - XKB_KEY_XF86Switch_VT_1 + 1;
+        int vt = syms[i] - XKB_KEY_XF86Switch_VT_1 + 1;
         if(vt >= 1 && vt <= 12) {
-            backend_change_vt(&state->backend, vt);
+            return backend_change_vt(&state->backend, vt);
+        }
+    }
+
+    return false;
+}
+
+static bool
+try_stop_operation(struct state *state, enum wl_keyboard_key_state key_state, int count, const u32 *syms) {
+    if(key_state != WL_KEYBOARD_KEY_STATE_RELEASED || !state->operation || !state->operation_server_inited) {
+        return false;
+    }
+
+    for(int i = 0; i < count; i++) {
+        if(state->operation_key == syms[i]) {
+            operation_stop_whatever(state);
+            state->operation_key = 0;
             return true;
         }
     }
@@ -75,24 +94,43 @@ handle_change_vt(struct state *state, int count, const xkb_keysym_t *keysyms) {
 }
 
 static bool
-handle_keybinds(struct state *state, struct keyboard *keyboard, u32 keycode, u32 layout_idx) {
-    // for reference see notes on key consumption in the `xkbcommon.h` header
-    u32 mods = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
+handle_comp_keybinds(struct state *state, struct keyboard *keyboard, int count, const u32 *syms) {
     static const u32 significant_mods = WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_MOD2 |
                                         WLR_MODIFIER_MOD3 | WLR_MODIFIER_LOGO | WLR_MODIFIER_MOD5;
 
-    const u32 *syms;
-    int count = xkb_keymap_key_get_syms_by_level(keyboard->wlr_keyboard->keymap, keycode, layout_idx, 0, &syms);
+    u32 mods = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
 
     for(int i = 0; i < count; i++) {
         struct keybind *iter;
         wl_list_for_each(iter, &state->keybinds, link) {
             if(syms[i] == iter->key && ((mods & significant_mods) == iter->modifiers)) {
-                wlr_log(WLR_ERROR, "action: %d", iter->type);
                 action_perform(state, iter->type, iter->action);
+                if(iter->type == ACTION_TYPE_START_MOVE || iter->type == ACTION_TYPE_START_RESIZE) {
+                    // keep reference of the key that started this move/resize so we can stop it on key release
+                    state->operation_key = syms[i];
+                }
+
                 return true;
             }
         }
+    }
+
+    return false;
+}
+
+static bool
+handle_keybinds(struct state *state, struct keyboard *keyboard, u32 keycode, enum wl_keyboard_key_state key_state) {
+    u32 layout_idx = xkb_state_key_get_layout(keyboard->wlr_keyboard->xkb_state, keycode);
+
+    const u32 *syms;
+    int count = xkb_keymap_key_get_syms_by_level(keyboard->wlr_keyboard->keymap, keycode, layout_idx, 0, &syms);
+
+    if(try_stop_operation(state, key_state, count, syms)) {
+        return true;
+    }
+
+    if(key_state != WL_KEYBOARD_KEY_STATE_RELEASED) {
+        return handle_comp_keybinds(state, keyboard, count, syms);
     }
 
     return false;
@@ -104,22 +142,13 @@ handle_key(struct wl_listener *listener, void *data) {
     struct wlr_keyboard_key_event *event = data;
     struct state *state = state_get();
 
-    if(state->operation && state->operation_server_inited) {
-        operation_stop_whatever(state);
-    }
-
     // translate libinput keycode -> xkbcommon
     u32 keycode = event->keycode + 8;
 
-    const xkb_keysym_t *syms;
-    int count = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
-
-    bool handled = handle_change_vt(state, count, syms);
-    if(!handled && event->state != WL_KEYBOARD_KEY_STATE_RELEASED) {
-        u32 layout_idx = xkb_state_key_get_layout(keyboard->wlr_keyboard->xkb_state, keycode);
-        handled = handle_keybinds(state, keyboard, keycode, layout_idx);
+    bool handled = handle_change_vt(state, keyboard, keycode);
+    if(!handled) {
+        handled = handle_keybinds(state, keyboard, keycode, event->state);
     }
-
     if(!handled) {
         // pass to client
         wlr_seat_set_keyboard(state->seat.wlr_seat, keyboard->wlr_keyboard);

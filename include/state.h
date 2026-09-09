@@ -48,10 +48,13 @@ struct state {
 
     enum operation operation;
     bool operation_server_inited;
+    u32 operation_key;
     struct toplevel *grabbed_toplevel;
     double grab_x, grab_y;
     struct wlr_box grabbed_toplevel_initial_box;
     u32 resize_edges;
+
+    struct wlr_scene_tree *drag_icons;
 
     struct workspace *active_workspace;
     struct toplevel *warp_on_transaction;

@@ -220,10 +220,17 @@ handle_destroy_drag(struct wl_listener *listener, void *data) {
 
     struct state *state = state_get();
 
+    wlr_log(WLR_ERROR, "drag stopped");
+
     state->operation = OPERATION_NONE;
     wl_list_remove(&state->seat.destroy_drag.link);
 
-    cursor_focus(state, time_now_ms(), false);
+    if(state->drag_icons) {
+        wlr_scene_node_set_enabled(&state->drag_icons->node, false);
+        state->drag_icons = NULL;
+    }
+
+    cursor_focus(state, time_now_ms(), true);
 }
 
 void
@@ -231,10 +238,12 @@ operation_start_drag(struct state *state, struct wlr_drag *drag) {
     state->operation = OPERATION_DRAG;
 
     if(drag->icon) {
-        wlr_scene_drag_icon_create(state->scene.trees.grab, drag->icon);
+        state->drag_icons = wlr_scene_drag_icon_create(state->scene.trees.grab, drag->icon);
     }
 
     cursor_set_image(state, "grab");
+
+    wlr_log(WLR_ERROR, "drag started");
 
     state->seat.destroy_drag.notify = handle_destroy_drag;
     wl_signal_add(&drag->events.destroy, &state->seat.destroy_drag);
@@ -343,7 +352,7 @@ operation_tick(struct state *state) {
             break;
         }
         case OPERATION_DRAG: {
-            wlr_scene_node_set_position(&state->scene.trees.grab->node, state->cursor.wlr_cursor->x,
+            wlr_scene_node_set_position(&state->drag_icons->node, state->cursor.wlr_cursor->x,
                     state->cursor.wlr_cursor->y);
             break;
         }

@@ -73,14 +73,14 @@ handle_motion_shared(struct state *state, u32 time) {
     // switch the active workspace if cross monitor
     state->active_workspace = output->active_workspace;
 
+    // handle pointer focus
+    if(state->active_workspace && workspace_is_presented(state->active_workspace)) {
+        cursor_focus(state, time, true);
+    }
+
     if(state->operation) {
         // perform the next tick of operation, that is move/resize grabbed toplevel or drag
         operation_tick(state);
-    }
-
-    // finally, handle pointer focus
-    if(state->active_workspace && workspace_is_presented(state->active_workspace)) {
-        cursor_focus(state, time, true);
     }
 
     cursor_reset_idle(state);
@@ -167,7 +167,7 @@ handle_button(struct wl_listener *listener, void *data) {
         }
     }
 
-    if(event->state == WL_POINTER_BUTTON_STATE_RELEASED && state->operation) {
+    if(event->state == WL_POINTER_BUTTON_STATE_RELEASED && state->operation && state->operation_server_inited) {
         operation_stop_whatever(state);
     } else {
         // else notify the client with pointer focus that a button press has occurred

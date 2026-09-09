@@ -318,7 +318,6 @@ handle_unmap(struct wl_listener *listener, void *data) {
             }
             case TOPLEVEL_STATE_FLOAT: {
                 if(toplevel == state->focused_toplevel) {
-                    // before removing the toplevel from the layout etc, find the one to give the focus next
                     struct toplevel *focus_next = find_next_to_focus_float(toplevel);
                     toplevel_focus(state, focus_next, false);
                 }
@@ -328,7 +327,10 @@ handle_unmap(struct wl_listener *listener, void *data) {
             }
             case TOPLEVEL_STATE_FULLSCREEN: {
                 workspace->fullscreen = NULL;
-                output_focus(state, workspace->output, true);
+                if(toplevel == state->focused_toplevel) {
+                    state->focused_toplevel = NULL;
+                    output_focus(state, workspace->output, true);
+                }
                 break;
             }
         }
