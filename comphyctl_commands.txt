@@ -18,7 +18,6 @@ trackpad_disable_while_typing <value: "on" "off">
 trackpad_natural_scroll <value: "on" "off">
 trackpad_scroll_method <value: "none" "two_fingers" "edge" "on_button_down">
 cursor_theme <theme: string> <size: int>
-cursor_warp <value: "none" "on_output_change" "on_focus_change">
 cursor_hide_after_ms <value: int>
 gaps <outer: int> <inner: int>
 smart_gaps <value: "on" "off">

@@ -48,15 +48,6 @@ void
 cursor_set_theme(struct cursor *cursor, char *theme, int size);
 
 void
-cursor_warp_output(struct state *state, struct output *output);
-
-void
-cursor_warp_toplevel(struct state *state, struct toplevel *toplevel);
-
-void
-cursor_warp_layer(struct state *state, struct layer *layer);
-
-void
 cursor_reset_idle(struct state *state);
 
 #endif

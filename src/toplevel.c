@@ -237,7 +237,7 @@ handle_map(struct wl_listener *listener, void *data) {
         }
     }
 
-    toplevel_focus(state, toplevel, false);
+    toplevel_focus(state, toplevel);
 }
 
 static struct toplevel *
@@ -294,22 +294,18 @@ handle_unmap(struct wl_listener *listener, void *data) {
 
     struct workspace *workspace = toplevel->workspace;
 
-    if(toplevel == state->warp_on_transaction) {
-        state->warp_on_transaction = NULL;
-    }
-
     if(toplevel == state->grabbed_toplevel) {
         operation_stop_whatever(state);
         // in this case `toplevel->workspace` may not reflect valid state, since we only update it once the
         // toplevel is dropped, so we use `state->active_workspace`
-        output_focus(state, state->active_workspace->output, true);
+        output_focus(state, state->active_workspace->output);
     } else {
         switch(toplevel->state) {
             case TOPLEVEL_STATE_TILED: {
                 if(toplevel == state->focused_toplevel) {
                     // before removing the toplevel from the layout etc, find the one to give the focus next
                     struct toplevel *focus_next = find_next_to_focus_tiled(toplevel);
-                    toplevel_focus(state, focus_next, false);
+                    toplevel_focus(state, focus_next);
                 }
 
                 layout_remove(toplevel);
@@ -319,7 +315,7 @@ handle_unmap(struct wl_listener *listener, void *data) {
             case TOPLEVEL_STATE_FLOAT: {
                 if(toplevel == state->focused_toplevel) {
                     struct toplevel *focus_next = find_next_to_focus_float(toplevel);
-                    toplevel_focus(state, focus_next, false);
+                    toplevel_focus(state, focus_next);
                 }
 
                 wl_list_remove(&toplevel->link);
@@ -329,7 +325,7 @@ handle_unmap(struct wl_listener *listener, void *data) {
                 workspace->fullscreen = NULL;
                 if(toplevel == state->focused_toplevel) {
                     state->focused_toplevel = NULL;
-                    output_focus(state, workspace->output, true);
+                    output_focus(state, workspace->output);
                 }
                 break;
             }
@@ -622,42 +618,8 @@ toplevel_create(struct state *state, struct wlr_xdg_toplevel *wlr_toplevel) {
     return toplevel;
 }
 
-static void
-warp_cursor(struct state *state, struct toplevel *toplevel) {
-    if(toplevel->transaction_state == TRANSACTION_STATE_CLEAN) {
-        cursor_warp_toplevel(state, toplevel);
-    } else {
-        // mark it so when the transaction commits the cursor is warped
-        state->warp_on_transaction = toplevel;
-        transaction_schedule_commit(state, toplevel->workspace);
-    }
-}
-
-static void
-warp_on_focus(struct state *state, struct toplevel *toplevel, struct toplevel *prev) {
-    switch(state->config.cursor.warp) {
-        case CURSOR_WARP_NEVER: {
-            break;
-        }
-        case CURSOR_WARP_ON_OUTPUT_CHANGE: {
-            struct output *output = prev ? prev->workspace->output : cursor_get_output(state);
-
-            if(toplevel->workspace->output != output) {
-                warp_cursor(state, toplevel);
-            }
-
-            break;
-        }
-        case CURSOR_WARP_ALWAYS: {
-            warp_cursor(state, toplevel);
-
-            break;
-        }
-    }
-}
-
 void
-toplevel_focus(struct state *state, struct toplevel *toplevel, bool warp) {
+toplevel_focus(struct state *state, struct toplevel *toplevel) {
     if(state->lock_mgr.lock || state->is_exclusive || toplevel == state->focused_toplevel ||
             (state->grabbed_toplevel && toplevel != state->grabbed_toplevel) ||
             (toplevel && toplevel->workspace->fullscreen && toplevel != toplevel->workspace->fullscreen)) {
@@ -690,37 +652,10 @@ toplevel_focus(struct state *state, struct toplevel *toplevel, bool warp) {
         wlr_seat_keyboard_notify_enter(state->seat.wlr_seat, toplevel->wlr_toplevel->base->surface, keyboard->keycodes,
                 keyboard->num_keycodes, &keyboard->modifiers);
     }
-
-    if(warp) {
-        warp_on_focus(state, toplevel, prev);
-    }
-}
-
-static void
-warp_on_move(struct state *state, struct toplevel *toplevel, struct workspace *new, struct workspace *old) {
-    switch(state->config.cursor.warp) {
-        case CURSOR_WARP_NEVER: {
-            break;
-        }
-        case CURSOR_WARP_ON_OUTPUT_CHANGE: {
-            if(new->output != old->output && (!new->fullscreen || toplevel == new->fullscreen)) {
-                warp_cursor(state, toplevel);
-            }
-
-            break;
-        }
-        case CURSOR_WARP_ALWAYS: {
-            if(!new->fullscreen || toplevel == new->fullscreen) {
-                warp_cursor(state, toplevel);
-            }
-
-            break;
-        }
-    }
 }
 
 void
-toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace, bool warp) {
+toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace) {
     if(toplevel == state->grabbed_toplevel || toplevel->workspace == workspace) {
         return;
     }
@@ -775,9 +710,6 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
     }
 
     workspace_set_active(state, workspace, !workspace->fullscreen);
-    if(warp) {
-        warp_on_move(state, toplevel, workspace, old_workspace);
-    }
 }
 
 u32

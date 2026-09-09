@@ -31,7 +31,6 @@ enum action_type {
     ACTION_TYPE_TRACKPAD_NATURAL_SCROLL,
     ACTION_TYPE_TRACKPAD_SCROLL_METHOD,
     ACTION_TYPE_CURSOR_THEME,
-    ACTION_TYPE_CURSOR_WARP,
     ACTION_TYPE_CURSOR_HIDE_AFTER_MS,
     ACTION_TYPE_GAPS,
     ACTION_TYPE_SMART_GAPS,
@@ -44,7 +43,7 @@ enum action_type {
     ACTION_TYPE_TOPLEVEL_RULE,
     ACTION_TYPE_OUTPUT_RULE,
 
-    ACTION_TYPE_CREATE_KEYBIND,
+    ACTION_TYPE_KEYBIND,
 };
 
 struct action_create_workspace {
@@ -107,16 +106,6 @@ struct action_trackpad_scroll_method {
 struct action_cursor_theme {
     char *theme;
     int size;
-};
-
-enum cursor_warp {
-    CURSOR_WARP_NEVER = 0,
-    CURSOR_WARP_ON_OUTPUT_CHANGE,
-    CURSOR_WARP_ALWAYS,
-};
-
-struct action_cursor_warp {
-    enum cursor_warp value;
 };
 
 struct action_cursor_hide_after_ms {

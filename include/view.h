@@ -26,7 +26,7 @@ struct output *
 view_get_output(enum view *view);
 
 void
-view_focus(struct state *state, enum view *view, bool warp);
+view_focus(struct state *state, enum view *view);
 
 void
 view_unfocus(struct state *state);

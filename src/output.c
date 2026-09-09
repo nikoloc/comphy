@@ -185,7 +185,7 @@ handle_destroy(struct wl_listener *listener, void *data) {
             struct output *focused_output = view_get_output(view);
             if(focused_output == output) {
                 // if the focus is on this output move it elsewhere
-                output_focus(state, next_output, true);
+                output_focus(state, next_output);
             }
         }
     }
@@ -314,20 +314,19 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
 }
 
 void
-output_focus(struct state *state, struct output *output, bool warp) {
+output_focus(struct state *state, struct output *output) {
     // go from the top most tree and find the view that accepts keyboard focus
     {
         struct layer *iter;
         wl_list_for_each(iter, &output->layers.overlay, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter, warp);
-                cursor_warp_output(state, output);
+                layer_focus(state, iter);
                 return;
             }
         }
         wl_list_for_each(iter, &output->layers.top, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter, warp);
+                layer_focus(state, iter);
                 return;
             }
         }
@@ -337,19 +336,19 @@ output_focus(struct state *state, struct output *output, bool warp) {
     state->active_workspace = workspace;
 
     if(workspace->fullscreen) {
-        toplevel_focus(state, workspace->fullscreen, warp);
+        toplevel_focus(state, workspace->fullscreen);
         return;
     }
 
     struct wl_list *top_most = wl_list_first(&workspace->floats);
     if(top_most) {
         struct toplevel *toplevel = CONTAINER_OF(top_most, struct toplevel, link);
-        toplevel_focus(state, toplevel, warp);
+        toplevel_focus(state, toplevel);
         return;
     }
 
     if(workspace->master) {
-        toplevel_focus(state, workspace->master, warp);
+        toplevel_focus(state, workspace->master);
         return;
     }
 
@@ -358,20 +357,16 @@ output_focus(struct state *state, struct output *output, bool warp) {
         struct layer *iter;
         wl_list_for_each(iter, &output->layers.bottom, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter, warp);
+                layer_focus(state, iter);
                 return;
             }
         }
         wl_list_for_each(iter, &output->layers.background, link) {
             if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter, warp);
+                layer_focus(state, iter);
                 return;
             }
         }
-    }
-
-    if(warp) {
-        cursor_warp_output(state, output);
     }
 }
 

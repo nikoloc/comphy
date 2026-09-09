@@ -100,9 +100,6 @@ action_destroy(enum action_type type, void *_action) {
         case ACTION_TYPE_CURSOR_HIDE_AFTER_MS: {
             break;
         }
-        case ACTION_TYPE_CURSOR_WARP: {
-            break;
-        }
         case ACTION_TYPE_GAPS: {
             break;
         }
@@ -132,13 +129,13 @@ action_destroy(enum action_type type, void *_action) {
             _action = NULL;
             break;
         }
-        case ACTION_TYPE_CREATE_KEYBIND: {
-            // same as above
+        case ACTION_TYPE_OUTPUT_RULE: {
+            // long-lived rule struct managed separately
             _action = NULL;
             break;
         }
-        case ACTION_TYPE_OUTPUT_RULE: {
-            // long-lived rule struct managed separately
+        case ACTION_TYPE_KEYBIND: {
+            // same as above
             _action = NULL;
             break;
         }
@@ -181,26 +178,6 @@ parse_direction(const char *str, enum wlr_direction *dir) {
 
     if(strcmp(str, "left") == 0) {
         *dir = WLR_DIRECTION_LEFT;
-        return true;
-    }
-
-    return false;
-}
-
-static bool
-parse_cursor_warp(const char *str, enum cursor_warp *value) {
-    if(strcmp(str, "never") == 0) {
-        *value = CURSOR_WARP_NEVER;
-        return true;
-    }
-
-    if(strcmp(str, "on_output_change") == 0) {
-        *value = CURSOR_WARP_ON_OUTPUT_CHANGE;
-        return true;
-    }
-
-    if(strcmp(str, "always") == 0) {
-        *value = CURSOR_WARP_ALWAYS;
         return true;
     }
 
@@ -647,24 +624,6 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         }
 
         return true;
-    } else if(strcmp(word, "cursor_warp") == 0) {
-        *out_type = ACTION_TYPE_CURSOR_WARP;
-        struct action_cursor_warp *action = ALLOC(struct action_cursor_warp);
-        *dest = action;
-
-        if(!shell_parser_pop(parser, sizeof(word), word)) {
-            action_destroy(*out_type, *dest);
-            *dest = NULL;
-            return false;
-        }
-
-        if(!parse_cursor_warp(word, &action->value)) {
-            action_destroy(*out_type, *dest);
-            *dest = NULL;
-            return false;
-        }
-
-        return true;
     } else if(strcmp(word, "cursor_hide_after_ms") == 0) {
         *out_type = ACTION_TYPE_CURSOR_HIDE_AFTER_MS;
         struct action_cursor_hide_after_ms *action = ALLOC(struct action_cursor_hide_after_ms);
@@ -1062,8 +1021,8 @@ action_create(struct shell_parser *parser, enum action_type *out_type, void **de
         }
 
         return true;
-    } else if(strcmp(word, "create_keybind") == 0) {
-        *out_type = ACTION_TYPE_CREATE_KEYBIND;
+    } else if(strcmp(word, "keybind") == 0) {
+        *out_type = ACTION_TYPE_KEYBIND;
         struct keybind *keybind = ALLOC(struct keybind);
         *dest = keybind;
 

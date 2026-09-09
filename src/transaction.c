@@ -270,14 +270,6 @@ commit_all(struct state *state, struct workspace *workspace) {
     if(workspace == state->active_workspace && workspace != state->active_workspace->output->presented_workspace) {
         show_workspace(state);
     }
-
-    if(state->warp_on_transaction && state->warp_on_transaction->workspace == workspace) {
-        if(workspace == state->active_workspace) {
-            cursor_warp_toplevel(state, state->warp_on_transaction);
-        }
-
-        state->warp_on_transaction = NULL;
-    }
 }
 
 static void

@@ -28,7 +28,7 @@ void
 layer_destroy(struct layer *layer);
 
 void
-layer_focus(struct state *state, struct layer *layer, bool warp);
+layer_focus(struct state *state, struct layer *layer);
 
 void
 layers_arrange(struct state *state, struct output *output);

@@ -6,7 +6,6 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
-#include "config.h"
 #include "layout.h"
 #include "list_helpers.h"
 #include "output.h"
@@ -109,7 +108,7 @@ handle_map(struct wl_listener *listener, void *data) {
 
     wlr_scene_node_raise_to_top(&layer->scene_tree->tree->node);
     layers_arrange(state, output);
-    layer_focus(state, layer, true);
+    layer_focus(state, layer);
 }
 
 static void
@@ -137,7 +136,7 @@ handle_unmap(struct wl_listener *listener, void *data) {
     if(layer == state->focused_layer) {
         state->is_exclusive = false;
 
-        output_focus(state, output, true);
+        output_focus(state, output);
     }
 
     layers_arrange(state, output);
@@ -230,7 +229,7 @@ layer_create(struct state *state, struct wlr_layer_surface_v1 *wlr_layer) {
 }
 
 void
-layer_focus(struct state *state, struct layer *layer, bool warp) {
+layer_focus(struct state *state, struct layer *layer) {
     if(state->lock_mgr.lock) {
         return;
     }
@@ -252,10 +251,6 @@ layer_focus(struct state *state, struct layer *layer, bool warp) {
     if(keyboard) {
         wlr_seat_keyboard_notify_enter(state->seat.wlr_seat, layer->wlr_layer->surface, keyboard->keycodes,
                 keyboard->num_keycodes, &keyboard->modifiers);
-    }
-
-    if(warp) {
-        cursor_warp_layer(state, layer);
     }
 }
 

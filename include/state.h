@@ -57,7 +57,6 @@ struct state {
     struct wlr_scene_tree *drag_icons;
 
     struct workspace *active_workspace;
-    struct toplevel *warp_on_transaction;
 
     struct lock_surface *focused_lock;
     struct layer *focused_layer;

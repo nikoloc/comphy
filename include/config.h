@@ -8,7 +8,6 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 
-#include "action_types.h"
 #include "color.h"
 
 struct config {
@@ -32,7 +31,6 @@ struct config {
 
     struct {
         int hide_after_ms;
-        enum cursor_warp warp;
     } cursor;
 
     struct {

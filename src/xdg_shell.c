@@ -38,7 +38,7 @@ handle_request_activate(struct wl_listener *listener, void *data) {
 
     struct toplevel *toplevel = view_get_toplevel(view);
     if(toplevel->wlr_toplevel->base->surface->mapped) {
-        toplevel_focus(state, toplevel, false);
+        toplevel_focus(state, toplevel);
     }
 }
 
@@ -62,6 +62,5 @@ void
 xdg_shell_deinit(struct xdg_shell *shell) {
     wl_list_remove(&shell->new_toplevel.link);
     wl_list_remove(&shell->new_popup.link);
-
     wl_list_remove(&shell->request_activate.link);
 }

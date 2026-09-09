@@ -74,7 +74,7 @@ struct toplevel *
 toplevel_create(struct state *state, struct wlr_xdg_toplevel *wlr_toplevel);
 
 void
-toplevel_focus(struct state *state, struct toplevel *toplevel, bool warp);
+toplevel_focus(struct state *state, struct toplevel *toplevel);
 
 void
 toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_box *box);
@@ -83,7 +83,7 @@ struct output *
 toplevel_float_largest_output_intersection(struct state *state, struct toplevel *toplevel);
 
 void
-toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace, bool warp);
+toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struct workspace *workspace);
 
 u32
 toplevel_get_corner_closest_to(struct toplevel *toplevel, int x, int y);

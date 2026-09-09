@@ -151,7 +151,7 @@ workspace_set_active(struct state *state, struct workspace *workspace, bool keep
     workspace->output->active_workspace = workspace;
 
     if(!keep_focus) {
-        output_focus(state, workspace->output, workspace->output != old_output);
+        output_focus(state, workspace->output);
     }
 
     wlr_ext_workspace_handle_v1_set_active(old_workspace->ext_workspace, false);

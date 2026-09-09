@@ -122,7 +122,7 @@ static void
 focus_cross_output_from_toplevel(struct state *state, struct toplevel *toplevel, enum wlr_direction direction) {
     struct output *output = get_cross_output_from_toplevel(state, toplevel, direction);
     if(output) {
-        output_focus(state, output, true);
+        output_focus(state, output);
     }
 }
 
@@ -130,7 +130,7 @@ static void
 focus_cross_output_from_output(struct state *state, struct output *output, enum wlr_direction direction) {
     struct output *new_output = get_cross_output_from_output(state, output, direction);
     if(new_output) {
-        output_focus(state, new_output, true);
+        output_focus(state, new_output);
     }
 }
 
@@ -207,7 +207,7 @@ focus(struct state *state, enum wlr_direction direction) {
             // for tiled try to figure out the next one from the layout
             struct toplevel *focus_next = find_in_direction(toplevel, direction);
             if(focus_next) {
-                toplevel_focus(state, focus_next, true);
+                toplevel_focus(state, focus_next);
             } else {
                 focus_cross_output_from_toplevel(state, toplevel, direction);
             }
@@ -232,7 +232,7 @@ static void
 move_cross_output(struct state *state, struct toplevel *toplevel, enum wlr_direction direction) {
     struct output *output = get_cross_output_from_toplevel(state, toplevel, direction);
     if(output) {
-        toplevel_move_to_workspace(state, toplevel, output->active_workspace, true);
+        toplevel_move_to_workspace(state, toplevel, output->active_workspace);
     }
 }
 
@@ -341,7 +341,7 @@ action_perform(struct state *state, enum action_type type, void *_action) {
 
             struct workspace *workspace = workspace_find_by_idx(state, action->idx);
             if(workspace) {
-                toplevel_move_to_workspace(state, state->focused_toplevel, workspace, true);
+                toplevel_move_to_workspace(state, state->focused_toplevel, workspace);
             }
             break;
         }
@@ -505,11 +505,6 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             cursor_set_theme(&state->cursor, action->theme, action->size);
             break;
         }
-        case ACTION_TYPE_CURSOR_WARP: {
-            struct action_cursor_warp *action = _action;
-            state->config.cursor.warp = action->value;
-            break;
-        }
         case ACTION_TYPE_CURSOR_HIDE_AFTER_MS: {
             struct action_cursor_hide_after_ms *action = _action;
             state->config.cursor.hide_after_ms = action->value;
@@ -595,7 +590,7 @@ action_perform(struct state *state, enum action_type type, void *_action) {
             }
             break;
         }
-        case ACTION_TYPE_CREATE_KEYBIND: {
+        case ACTION_TYPE_KEYBIND: {
             struct keybind *keybind = _action;
 
             wl_list_insert(&state->keybinds, &keybind->link);

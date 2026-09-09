@@ -47,7 +47,7 @@ output_configure_from_rules(struct state *state, struct output *output);
 
 // give focus to some view on this workspace in the general focus order; does not handle workspace switching!
 void
-output_focus(struct state *state, struct output *output, bool should_warp);
+output_focus(struct state *state, struct output *output);
 
 struct output *
 output_get_relative(struct state *state, struct output *output, enum wlr_direction direction);

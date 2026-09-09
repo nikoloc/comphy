@@ -38,7 +38,7 @@ cursor_focus(struct state *state, u32 time_ms, bool handle_keyboard_focus) {
     }
 
     if(handle_keyboard_focus) {
-        view_focus(state, view, false);
+        view_focus(state, view);
     }
 
     // TODO: contraints
@@ -305,37 +305,6 @@ cursor_get_output(struct state *state) {
 
     struct output *output = wlr_output->data;
     return output;
-}
-
-void
-cursor_warp_output(struct state *state, struct output *output) {
-    wlr_cursor_warp(state->cursor.wlr_cursor, NULL, output->full_area.x + output->full_area.width / 2.0f,
-            output->full_area.y + output->full_area.height / 2.0);
-    cursor_focus(state, time_now_ms(), false);
-
-    cursor_reset_idle(state);
-}
-
-void
-cursor_warp_toplevel(struct state *state, struct toplevel *toplevel) {
-    wlr_cursor_warp(state->cursor.wlr_cursor, NULL, toplevel->current.x + toplevel->current.width / 2.0f,
-            toplevel->current.y + toplevel->current.height / 2.0);
-    cursor_focus(state, time_now_ms(), false);
-
-    cursor_reset_idle(state);
-}
-
-void
-cursor_warp_layer(struct state *state, struct layer *layer) {
-    int x = layer->scene_tree->tree->node.x;
-    int y = layer->scene_tree->tree->node.y;
-    int width = layer->wlr_layer->current.actual_width;
-    int height = layer->wlr_layer->current.actual_height;
-
-    wlr_cursor_warp(state->cursor.wlr_cursor, NULL, x + width / 2.0f, y + height / 2.0f);
-    cursor_focus(state, time_now_ms(), false);
-
-    cursor_reset_idle(state);
 }
 
 void
