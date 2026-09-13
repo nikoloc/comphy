@@ -142,6 +142,8 @@ main(int argc, char **argv) {
     wl_list_init(&state->keyboards);
     wl_list_init(&state->keybinds);
 
+    wl_list_init(&state->transaction.ghosts);
+
     // essensial interfaces
     wlr_compositor_create(state->display, 6, state->backend.renderer);
     wlr_subcompositor_create(state->display);
@@ -187,6 +189,12 @@ main(int argc, char **argv) {
     wlr_log(WLR_INFO, "running 'comphy' on socket '%s'", socket);
     wl_display_run(state->display);
 
+    if(state->transaction.time_out) {
+        wl_event_source_remove(state->transaction.time_out);
+    }
+    if(state->transaction.schedule) {
+        wl_event_source_remove(state->transaction.schedule);
+    }
     // once it returns destroy all clients and cleanup
     wl_display_destroy_clients(state->display);
 cleanup:

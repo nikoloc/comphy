@@ -32,8 +32,6 @@ workspace_create(struct state *state, struct output *output, int idx) {
     wl_list_init(&workspace->floats);
     wl_list_init(&workspace->slaves);
 
-    wl_list_init(&workspace->ghosts);
-
     workspace->output = output;
     workspace->idx = idx;
     workspace->original_output_name = strdup(output->wlr_output->name);
@@ -138,14 +136,6 @@ workspace_destroy(struct state *state, struct workspace *workspace, bool output_
         output->presented_workspace = NULL;
     }
 
-    if(workspace->transaction_time_out) {
-        wl_event_source_remove(workspace->transaction_time_out);
-    }
-
-    if(workspace->transaction_schedule) {
-        wl_event_source_remove(workspace->transaction_schedule);
-    }
-
     FREE(workspace->original_output_name);
     FREE(workspace);
 }
@@ -166,11 +156,6 @@ workspace_show_toplevels(struct workspace *workspace, bool show) {
     }
 
     wl_list_for_each(iter, &workspace->floats, link) {
-        wlr_scene_node_set_enabled(&iter->scene_tree->node, show);
-    }
-
-    // also ghosts
-    wl_list_for_each(iter, &workspace->ghosts, link) {
         wlr_scene_node_set_enabled(&iter->scene_tree->node, show);
     }
 }
@@ -195,7 +180,7 @@ workspace_set_active(struct state *state, struct workspace *workspace, bool keep
     wlr_ext_workspace_handle_v1_set_active(workspace->ext_workspace, true);
 
     // commit on the transaction, tho we need to schedule one is the workspace is clean
-    transaction_schedule_commit(state, workspace);
+    transaction_schedule_commit(state);
 }
 
 struct workspace *

@@ -13,8 +13,11 @@
 #include "operation.h"
 #include "scene.h"
 #include "seat.h"
+#include "util/array.h"
 #include "util/ints.h"
 #include "xdg_shell.h"
+
+DEFINE_ARRAY(struct toplevel *, toplevel_ptr_array);
 
 // piece of global compositor state, passed to all the 'public' apis. since it is quite hard to get the to it from the
 // callbacks, it is made a singleton struct, which can be obtained in the callback context by calling `state()`. note
@@ -49,6 +52,7 @@ struct state {
     enum operation operation;
     bool operation_server_inited;
     u32 operation_key;
+
     struct toplevel *grabbed_toplevel;
     double grab_x, grab_y;
     struct wlr_box grabbed_toplevel_initial_box;
@@ -57,6 +61,17 @@ struct state {
     struct wlr_scene_tree *drag_icons;
 
     struct workspace *active_workspace;
+
+    struct transaction {
+        int dirty_count;
+        toplevel_ptr_array_t dirty_toplevels;
+
+        struct wl_event_source *time_out;
+        struct wl_event_source *schedule;
+        // when the toplevel unmaps we keep its last frame until the transaction finishes. such toplevel is flagged and
+        // kept here until the transaction is done, and is then destroyed for good.
+        struct wl_list ghosts;
+    } transaction;
 
     struct lock_surface *focused_lock;
     struct layer *focused_layer;
