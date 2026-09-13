@@ -3,6 +3,7 @@
 #include <libinput.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <wlr/types/wlr_keyboard_group.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>

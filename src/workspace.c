@@ -92,11 +92,8 @@ evacuate(struct state *state, struct workspace *workspace, struct workspace *nex
         toplevel_move_to_workspace(state, iter, next);
     }
 
-    wl_list_for_each_safe(iter, tmp, &workspace->slaves, link) {
-        toplevel_move_to_workspace(state, iter, next);
-    }
-
-    if(workspace->master) {
+    // since moving master out of the workspace promotes new slave to a master we just move master until there are none
+    while(workspace->master) {
         toplevel_move_to_workspace(state, workspace->master, next);
     }
 }
