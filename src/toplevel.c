@@ -334,7 +334,7 @@ handle_unmap(struct wl_listener *listener, void *data) {
 
     // add it as a ghost for the next transaction
     toplevel->is_ghost = true;
-    wl_list_insert(&workspace->ghosts, &toplevel->link);
+    wl_list_insert(&state->transaction.ghosts, &toplevel->link);
     wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
     transaction_mark_dirty(state, toplevel);
 }
@@ -800,7 +800,7 @@ toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_bo
         // this toplevel is ready by default. here we schedule a commit for the workspace, since we dont know if there
         // are going to be other toplevels that are dirty. if not, the idle is going to commit this one or any other
         // that may also not need the commit by the toplevel.
-        transaction_schedule_commit(state, toplevel->workspace);
+        transaction_schedule_commit(state);
         return;
     };
 

@@ -9,13 +9,12 @@ enum transaction_state {
 
 struct toplevel;
 struct state;
-struct workspace;
 
 void
 transaction_commit(struct state *state, struct toplevel *toplevel);
 
 void
-transaction_schedule_commit(struct state *state, struct workspace *workspace);
+transaction_schedule_commit(struct state *state);
 
 void
 transaction_mark_dirty(struct state *state, struct toplevel *toplevel);
