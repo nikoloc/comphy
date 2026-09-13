@@ -12,6 +12,10 @@ static void
 handle_request(struct state *state, struct wlr_ext_workspace_v1_request *request) {
     switch(request->type) {
         case WLR_EXT_WORKSPACE_V1_REQUEST_CREATE_WORKSPACE: {
+            if(!request->create_workspace.group) {
+                break;
+            }
+
             struct output *output = request->create_workspace.group->data;
             ASSERT(output);
 
@@ -25,6 +29,10 @@ handle_request(struct state *state, struct wlr_ext_workspace_v1_request *request
             break;
         }
         case WLR_EXT_WORKSPACE_V1_REQUEST_ACTIVATE: {
+            if(!request->activate.workspace) {
+                break;
+            }
+
             struct workspace *workspace = request->activate.workspace->data;
             ASSERT(workspace);
 
@@ -40,6 +48,10 @@ handle_request(struct state *state, struct wlr_ext_workspace_v1_request *request
             break;
         }
         case WLR_EXT_WORKSPACE_V1_REQUEST_REMOVE: {
+            if(!request->remove.workspace) {
+                break;
+            }
+
             struct workspace *workspace = request->remove.workspace->data;
             ASSERT(workspace);
 
