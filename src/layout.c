@@ -67,7 +67,7 @@ layout_configure(struct state *state, struct workspace *workspace) {
     };
 
     wlr_box_remove_gaps(&box, inner_gaps);
-    toplevel_configure(state, workspace->master, &box);
+    transaction_add_dirty(state, workspace->master, &box);
 
     if(slave_count == 0) {
         return;
@@ -89,7 +89,7 @@ layout_configure(struct state *state, struct workspace *workspace) {
         acc_height += box.height;
 
         wlr_box_remove_gaps(&box, inner_gaps);
-        toplevel_configure(state, iter, &box);
+        transaction_add_dirty(state, iter, &box);
         i++;
     }
 }

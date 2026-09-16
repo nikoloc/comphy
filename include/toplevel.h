@@ -76,9 +76,6 @@ toplevel_create(struct state *state, struct wlr_xdg_toplevel *wlr_toplevel);
 void
 toplevel_focus(struct state *state, struct toplevel *toplevel);
 
-void
-toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_box *box);
-
 struct output *
 toplevel_float_largest_output_intersection(struct state *state, struct toplevel *toplevel);
 
