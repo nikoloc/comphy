@@ -50,7 +50,7 @@ operation_start_move(struct state *state, struct toplevel *toplevel, bool server
 
     // move this toplevel to the grab tree
     toplevel->needs_reparenting = true;
-    transaction_schedule_commit(state);
+    transaction_add_ready(state, toplevel);
 
     state->operation_server_inited = server_inited;
     if(server_inited) {
@@ -132,7 +132,7 @@ insert_layout_at_cursor(struct state *state, struct toplevel *toplevel) {
 static void
 stop_shared(struct state *state) {
     // for reparenting back
-    transaction_schedule_commit(state);
+    transaction_add_ready(state, state->grabbed_toplevel);
 
     state->operation = OPERATION_NONE;
     state->grabbed_toplevel = NULL;
@@ -199,7 +199,7 @@ operation_start_resize(struct state *state, struct toplevel *toplevel, u32 edges
 
     // move this toplevel to the grab tree
     toplevel->needs_reparenting = true;
-    transaction_schedule_commit(state);
+    transaction_add_ready(state, toplevel);
 }
 
 void
@@ -280,7 +280,7 @@ move(struct state *state) {
             .height = toplevel->current.height,
     };
 
-    toplevel_configure(state, toplevel, &box);
+    transaction_add_dirty(state, toplevel, &box);
 }
 
 static void
@@ -334,7 +334,7 @@ resize(struct state *state) {
         }
     }
 
-    toplevel_configure(state, toplevel, &box);
+    transaction_add_dirty(state, toplevel, &box);
 }
 
 void

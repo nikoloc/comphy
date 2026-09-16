@@ -299,19 +299,17 @@ output_create(struct state *state, struct wlr_output *wlr_output) {
 void
 output_focus(struct state *state, struct output *output) {
     // go from the top most tree and find the view that accepts keyboard focus
-    {
-        struct layer *iter;
-        wl_list_for_each(iter, &output->layers.overlay, link) {
-            if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
-                return;
-            }
+    struct layer *iter;
+    wl_list_for_each(iter, &output->layers.overlay, link) {
+        if(iter->wlr_layer->current.keyboard_interactive == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE) {
+            layer_focus(state, iter);
+            return;
         }
-        wl_list_for_each(iter, &output->layers.top, link) {
-            if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
-                return;
-            }
+    }
+    wl_list_for_each(iter, &output->layers.top, link) {
+        if(iter->wlr_layer->current.keyboard_interactive == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE) {
+            layer_focus(state, iter);
+            return;
         }
     }
 
@@ -332,24 +330,6 @@ output_focus(struct state *state, struct output *output) {
 
     if(workspace->master) {
         toplevel_focus(state, workspace->master);
-        return;
-    }
-
-    // lookup bottom and backgroud layers. note: there cant be any slaves if there is no master
-    {
-        struct layer *iter;
-        wl_list_for_each(iter, &output->layers.bottom, link) {
-            if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
-                return;
-            }
-        }
-        wl_list_for_each(iter, &output->layers.background, link) {
-            if(iter->wlr_layer->current.keyboard_interactive) {
-                layer_focus(state, iter);
-                return;
-            }
-        }
     }
 }
 
@@ -364,37 +344,3 @@ output_find_by_name(struct state *state, char *name) {
 
     return NULL;
 }
-
-// bool
-// output_transfer_existing_workspaces(struct mwc_output *output) {
-//   /* if this output is reconnected then its workspaces are on some other monitor,
-//    * we try to find it; this is not efficient as things could be flagged, i am just lazy rn */
-//   bool found = false;
-//   struct mwc_output *o;
-//   struct mwc_workspace *w, *tmp;
-//   wl_list_for_each(o, &server.outputs, link) {
-//     wl_list_for_each_safe(w, tmp, &o->workspaces, link) {
-//       if(w->config != NULL && strcmp(w->config->output, output->wlr_output->name) == 0) {
-//         /* fix that outputs state */
-//         if(w == o->active_workspace) {
-//           struct mwc_workspace *owned_workspace = output_find_owned_workspace(o);
-//           /* it should have had its own workspace */
-//           assert(owned_workspace != NULL);
-//           change_workspace(owned_workspace, false);
-//         }
-//         /* transfer it to this output */
-//         w->output = output;
-//         wl_list_remove(&w->link);
-//         wl_list_insert(&output->workspaces, &w->link);
-//         if(output->active_workspace == NULL) {
-//           output->active_workspace = w;
-//         }
-//         found = true;
-//       }
-//     }
-//   }
-//
-//   return found;
-//
-// }
-//

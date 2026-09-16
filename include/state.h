@@ -64,7 +64,7 @@ struct state {
 
     struct transaction {
         int dirty_count;
-        toplevel_ptr_array_t dirty_toplevels;
+        toplevel_ptr_array_t toplevels;
 
         struct wl_event_source *time_out;
         struct wl_event_source *schedule;

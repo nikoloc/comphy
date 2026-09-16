@@ -180,7 +180,7 @@ workspace_set_active(struct state *state, struct workspace *workspace, bool keep
     wlr_ext_workspace_handle_v1_set_active(workspace->ext_workspace, true);
 
     // commit on the transaction, tho we need to schedule one is the workspace is clean
-    transaction_schedule_commit(state);
+    transaction_schedule(state);
 }
 
 struct workspace *

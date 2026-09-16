@@ -96,25 +96,6 @@ default_size(struct state *state, struct toplevel *toplevel, int *width, int *he
     }
 }
 
-static bool
-should_have_border(struct state *state, struct toplevel *toplevel) {
-    bool smart_gaps = state->config.gaps.smart && toplevel == toplevel->workspace->master &&
-                      wl_list_empty(&toplevel->workspace->slaves);
-
-    return toplevel->state != TOPLEVEL_STATE_FULLSCREEN && !smart_gaps;
-}
-
-static void
-center_float(struct toplevel *toplevel) {
-    ASSERT(toplevel->state == TOPLEVEL_STATE_FLOAT);
-
-    struct wlr_box output_box = toplevel->workspace->output->usable_area;
-    toplevel->pending.x = output_box.x + (output_box.width - toplevel->pending.width) / 2;
-    toplevel->pending.y = output_box.y + (output_box.height - toplevel->pending.height) / 2;
-
-    toplevel->needs_centering = false;
-}
-
 static void
 raise_children_above(struct toplevel *toplevel) {
     struct toplevel *iter;
@@ -165,6 +146,29 @@ toplevel_raise(struct toplevel *toplevel) {
 }
 
 static void
+create_scene_tree(struct state *state, struct toplevel *toplevel) {
+    if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
+        toplevel->scene_tree = wlr_scene_tree_create(state->scene.trees.floats);
+    } else {
+        toplevel->scene_tree = wlr_scene_tree_create(state->scene.trees.tiled);
+    }
+
+    wlr_scene_node_set_enabled(&toplevel->scene_tree->node, false);
+    toplevel->needs_initial_enable = true;
+
+    // in order to obtain this toplevel we keep a pointer to view, from which the type of view can be read, and then
+    // extracted by using `CONTAINER_OF()`
+    toplevel->scene_tree->node.data = &toplevel->view;
+
+    toplevel->content_tree = wlr_scene_xdg_surface_create(toplevel->scene_tree, toplevel->wlr_toplevel->base);
+
+    float color[4];
+    color_to_wlr_color(state->config.border.color.inactive, color);
+    toplevel->border = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, color);
+    wlr_scene_node_lower_to_bottom(&toplevel->border->node);
+}
+
+static void
 handle_map(struct wl_listener *listener, void *data) {
     UNUSED(data);
 
@@ -173,23 +177,12 @@ handle_map(struct wl_listener *listener, void *data) {
 
     wlr_log(WLR_DEBUG, "toplevel '%p' mapped", (void *)toplevel);
 
-    if(!state->active_workspace) {
-        // TODO: what if there is no output?
-        return;
-    }
-
+    // TODO: what if there is no output?
     struct workspace *workspace = state->active_workspace;
     toplevel->workspace = workspace;
 
-    // create the scene stuff
-    toplevel->content_tree = wlr_scene_xdg_surface_create(toplevel->scene_tree, toplevel->wlr_toplevel->base);
-
-    float color[4];
-    color_to_wlr_color(state->config.border.color.inactive, color);
-    toplevel->border = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, color);
-    wlr_scene_node_lower_to_bottom(&toplevel->border->node);
-
     toplevel->state = default_state(state, toplevel);
+    create_scene_tree(state, toplevel);
 
     switch(toplevel->state) {
         case TOPLEVEL_STATE_TILED: {
@@ -204,29 +197,15 @@ handle_map(struct wl_listener *listener, void *data) {
         }
         case TOPLEVEL_STATE_FLOAT: {
             wl_list_insert(&workspace->floats, &toplevel->link);
-            // reparent the tree to floating global
-            wlr_scene_node_reparent(&toplevel->scene_tree->node, state->scene.trees.floats);
 
             struct wlr_box box;
             default_size(state, toplevel, &box.width, &box.height);
             if(box.width > 0 && box.height > 0) {
                 // has the rule, send that size
                 toplevel->needs_centering = true;
-                toplevel_configure(state, toplevel, &box);
+                transaction_add_dirty(state, toplevel, &box);
             } else {
-                toplevel->has_border = should_have_border(state, toplevel);
-                // respect its choosen size
-                struct wlr_box *geometry = &toplevel->wlr_toplevel->base->geometry;
-
-                toplevel->pending.width = geometry->width;
-                toplevel->pending.height = geometry->height;
-                if(toplevel->has_border) {
-                    toplevel->pending.width += 2 * state->config.border.width;
-                    toplevel->pending.height += 2 * state->config.border.width;
-                }
-
-                center_float(toplevel);
-                transaction_commit(state, toplevel);
+                transaction_add_auto(state, toplevel);
             }
 
             break;
@@ -332,11 +311,7 @@ handle_unmap(struct wl_listener *listener, void *data) {
         }
     }
 
-    // add it as a ghost for the next transaction
-    toplevel->is_ghost = true;
-    wl_list_insert(&state->transaction.ghosts, &toplevel->link);
-    wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
-    transaction_mark_dirty(state, toplevel);
+    transaction_add_ghost(state, toplevel);
 }
 
 static void
@@ -383,7 +358,7 @@ handle_commit(struct wl_listener *listener, void *data) {
     struct toplevel *toplevel = CONTAINER_OF(listener, struct toplevel, commit);
     struct state *state = state_get();
 
-    wlr_log(WLR_DEBUG, "toplevel '%p' commited", (void *)toplevel);
+    // wlr_log(WLR_DEBUG, "toplevel '%p' commited", (void *)toplevel);
 
     if(!toplevel->wlr_toplevel->base->initialized) {
         return;
@@ -405,45 +380,27 @@ handle_commit(struct wl_listener *listener, void *data) {
     }
 
     if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
-        // we conform to the size it chose, even if its not the one we requested, or we did not request it at all
-        struct wlr_box *geometry = &toplevel->wlr_toplevel->base->geometry;
-
-        wlr_log(WLR_DEBUG, "toplevel '%p' commited with size %dx%d", (void *)toplevel, geometry->width,
-                geometry->height);
-
-        toplevel->pending.width = geometry->width;
-        toplevel->pending.height = geometry->height;
-
-        // need to add the border size to the box
-        if(toplevel->has_border) {
-            toplevel->pending.width += 2 * state->config.border.width;
-            toplevel->pending.height += 2 * state->config.border.width;
-        }
-
-        if(toplevel->needs_centering) {
-            center_float(toplevel);
-        }
-
-        transaction_commit(state, toplevel);
+        // conform
+        transaction_add_auto(state, toplevel);
         return;
     }
 
     if(toplevel->transaction_state != TRANSACTION_STATE_DIRTY) {
-        wlr_log(WLR_DEBUG, "toplevel commited but not dirty");
+        // wlr_log(WLR_DEBUG, "toplevel commited but not dirty");
         return;
     }
 
     u32 serial = toplevel->wlr_toplevel->base->current.configure_serial;
     if(serial < toplevel->configure_serial) {
-        wlr_log(WLR_DEBUG, "toplevel commited but old serial");
+        // wlr_log(WLR_DEBUG, "toplevel commited but old serial");
         // send a frame event, this makes the client commit a new buffer, conforming to our new state, in order to
         // conform to our transaction state. kinda hacky, but thats just how clients operate under wayland
         toplevel_send_frame_done(toplevel);
         return;
     }
 
-    // commit the new state for this toplevel. this will check for all the other toplevels on the screen and finalize
-    // the state for the output if everything is perfect, else its going to wait for others
+    // commit the new state for this toplevel. this will check for all the other toplevels in the transaction and
+    // finalize the state for the output if everything is perfect, else its going to wait for others
     transaction_commit(state, toplevel);
 }
 
@@ -460,7 +417,6 @@ handle_destroy(struct wl_listener *listener, void *data) {
     UNUSED(data);
 
     struct toplevel *toplevel = CONTAINER_OF(listener, struct toplevel, destroy);
-    ASSERT(!toplevel->wlr_toplevel->base->surface->mapped);
 
     wlr_foreign_toplevel_handle_v1_destroy(toplevel->foreign_toplevel_handle);
 
@@ -476,7 +432,7 @@ handle_destroy(struct wl_listener *listener, void *data) {
     wl_list_remove(&toplevel->set_title.link);
 
     if(toplevel->is_ghost) {
-        // dont destroy it fully, but keep the presentation and the pointer valid and flag it
+        // mark it as destroyed so its destroyed once thats done
         toplevel->is_destroyed = true;
         return;
     }
@@ -690,7 +646,7 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
                         .width = toplevel->current.width,
                         .height = toplevel->current.height,
                 };
-                toplevel_configure(state, toplevel, &box);
+                transaction_add_dirty(state, toplevel, &box);
             }
             break;
         }
@@ -704,7 +660,7 @@ toplevel_move_to_workspace(struct state *state, struct toplevel *toplevel, struc
             workspace->fullscreen = toplevel;
             toplevel->state = TOPLEVEL_STATE_FULLSCREEN;
 
-            toplevel_configure(state, toplevel, &workspace->output->full_area);
+            transaction_add_dirty(state, toplevel, &workspace->output->full_area);
             break;
         }
     }
@@ -761,50 +717,6 @@ toplevel_float_largest_output_intersection(struct state *state, struct toplevel 
     }
 
     return output;
-}
-
-static void
-send_size(struct state *state, struct toplevel *toplevel, int width, int height) {
-    toplevel->requested_width = width;
-    toplevel->requested_height = height;
-    toplevel->configure_serial = wlr_xdg_toplevel_set_size(toplevel->wlr_toplevel, width, height);
-    transaction_mark_dirty(state, toplevel);
-}
-
-void
-toplevel_configure(struct state *state, struct toplevel *toplevel, struct wlr_box *box) {
-    toplevel->pending = *box;
-    toplevel->has_border = should_have_border(state, toplevel);
-
-    if(box->width <= 0 || box->height <= 0) {
-        // should choose its own size
-        send_size(state, toplevel, 0, 0);
-        return;
-    }
-
-    // we need to subract the decorations from this toplevel. currently the only type of decoration is the border,
-    // but that may change in the future
-    int width = box->width;
-    int height = box->height;
-
-    if(toplevel->has_border) {
-        width -= 2 * state->config.border.width;
-        height -= 2 * state->config.border.width;
-    }
-
-    // patch this so we dont get negative width/height
-    width = MAX(width, 1);
-    height = MAX(height, 1);
-
-    if(width == toplevel->requested_width && height == toplevel->requested_height) {
-        // this toplevel is ready by default. here we schedule a commit for the workspace, since we dont know if there
-        // are going to be other toplevels that are dirty. if not, the idle is going to commit this one or any other
-        // that may also not need the commit by the toplevel.
-        transaction_schedule_commit(state);
-        return;
-    };
-
-    send_size(state, toplevel, width, height);
 }
 
 static void
@@ -870,7 +782,7 @@ set_float(struct state *state, struct toplevel *toplevel) {
     int width, height;
     default_size(state, toplevel, &width, &height);
 
-    toplevel_configure(state, toplevel,
+    transaction_add_dirty(state, toplevel,
             &(struct wlr_box){
                     .width = width,
                     .height = height,
@@ -911,7 +823,7 @@ set_fullscreen(struct state *state, struct toplevel *toplevel) {
     reset_hacks(toplevel);
 
     wlr_xdg_toplevel_set_fullscreen(toplevel->wlr_toplevel, true);
-    toplevel_configure(state, toplevel, &workspace->output->full_area);
+    transaction_add_dirty(state, toplevel, &workspace->output->full_area);
     wlr_foreign_toplevel_handle_v1_set_fullscreen(toplevel->foreign_toplevel_handle, true);
 }
 
