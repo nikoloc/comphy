@@ -379,29 +379,23 @@ handle_commit(struct wl_listener *listener, void *data) {
         return;
     }
 
-    if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
-        // conform
+    if(toplevel->transaction_state == TRANSACTION_STATE_DIRTY) {
+        u32 serial = toplevel->wlr_toplevel->base->current.configure_serial;
+        if(serial < toplevel->configure_serial) {
+            // wlr_log(WLR_DEBUG, "toplevel commited but old serial");
+            // send a frame event, this makes the client commit a new buffer, conforming to our new state, in order
+            // to conform to our transaction state. kinda hacky, but thats just how clients operate under wayland
+            toplevel_send_frame_done(toplevel);
+            return;
+        }
+
+        // commit the new state for this toplevel. this will check for all the other toplevels in the transaction
+        // and finalize the state for the output if everything is perfect, else its going to wait for others
+        transaction_commit(state, toplevel);
+    } else if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
+        // only conform if floating
         transaction_add_auto(state, toplevel);
-        return;
     }
-
-    if(toplevel->transaction_state != TRANSACTION_STATE_DIRTY) {
-        // wlr_log(WLR_DEBUG, "toplevel commited but not dirty");
-        return;
-    }
-
-    u32 serial = toplevel->wlr_toplevel->base->current.configure_serial;
-    if(serial < toplevel->configure_serial) {
-        // wlr_log(WLR_DEBUG, "toplevel commited but old serial");
-        // send a frame event, this makes the client commit a new buffer, conforming to our new state, in order to
-        // conform to our transaction state. kinda hacky, but thats just how clients operate under wayland
-        toplevel_send_frame_done(toplevel);
-        return;
-    }
-
-    // commit the new state for this toplevel. this will check for all the other toplevels in the transaction and
-    // finalize the state for the output if everything is perfect, else its going to wait for others
-    transaction_commit(state, toplevel);
 }
 
 void

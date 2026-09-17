@@ -16,9 +16,6 @@ void
 transaction_add_dirty(struct state *state, struct toplevel *toplevel, struct wlr_box *box);
 
 void
-transaction_remove(struct state *state, struct toplevel *toplevel);
-
-void
 transaction_add_auto(struct state *state, struct toplevel *toplevel);
 
 void

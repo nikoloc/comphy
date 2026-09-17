@@ -128,32 +128,58 @@ clip(struct state *state, struct toplevel *toplevel) {
 }
 
 static void
+center_float(struct toplevel *toplevel) {
+    ASSERT(toplevel->state == TOPLEVEL_STATE_FLOAT);
+
+    if(toplevel->pending.width == 0 || toplevel->pending.height) {
+        // CONTINUE HERE
+    }
+
+    struct wlr_box output_box = toplevel->workspace->output->usable_area;
+    toplevel->pending.x = output_box.x + (output_box.width - toplevel->pending.width) / 2;
+    toplevel->pending.y = output_box.y + (output_box.height - toplevel->pending.height) / 2;
+
+    toplevel->needs_centering = false;
+}
+
+static void
+conform_to_client_geometry(struct state *state, struct toplevel *toplevel) {
+    struct wlr_box *geometry = &toplevel->wlr_toplevel->base->geometry;
+
+    toplevel->pending.width = geometry->width;
+    toplevel->pending.height = geometry->height;
+
+    // need to add the border size to the box
+    if(toplevel->has_border) {
+        toplevel->pending.width += 2 * state->config.border.width;
+        toplevel->pending.height += 2 * state->config.border.width;
+    }
+
+    if(toplevel->needs_centering) {
+        center_float(toplevel);
+    }
+}
+
+static void
 commit(struct state *state, struct toplevel *toplevel) {
     if(toplevel->transaction_state == TRANSACTION_STATE_DIRTY) {
         // request a new frame since we are commiting it with no good state
         toplevel_send_frame_done(toplevel);
     }
 
-    // return the transaction state for this toplevel to the default one
+    // reset the transaction state
     toplevel->transaction_state = TRANSACTION_STATE_CLEAN;
 
+    // patch own size for floating clients
+    if(toplevel->state == TOPLEVEL_STATE_FLOAT) {
+        conform_to_client_geometry(state, toplevel);
+    }
+
+    // commit the new state
+    toplevel->current = toplevel->pending;
+
     // update the presentation
-    if(toplevel->needs_initial_enable) {
-        wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
-        toplevel->needs_initial_enable = false;
-    }
-
-    if(toplevel->state == TOPLEVEL_STATE_FLOAT && toplevel->needs_centering) {
-        // this means the client timed out and its pending stuff is all zeros, we patch it with current
-        struct wlr_box output_box = toplevel->workspace->output->usable_area;
-        toplevel->current = wlr_box_centered_in(&output_box, toplevel->current.width, toplevel->current.height);
-        toplevel->needs_centering = false;
-    } else {
-        toplevel->current = toplevel->pending;
-    }
-
     clip(state, toplevel);
-
     if(toplevel->needs_reparenting) {
         reparent(state, toplevel);
     }
@@ -174,6 +200,11 @@ commit(struct state *state, struct toplevel *toplevel) {
         toplevel->snapshot_tree = NULL;
         // reenable the real buffer
         wlr_scene_node_set_enabled(&toplevel->content_tree->node, true);
+    }
+
+    if(toplevel->needs_initial_enable) {
+        wlr_scene_node_set_enabled(&toplevel->scene_tree->node, true);
+        toplevel->needs_initial_enable = false;
     }
 }
 
@@ -235,8 +266,6 @@ perform_transaction(struct state *state) {
     show_workspace(state);
     remove_time_out(state);
 }
-
-// ABOVE NOTHING
 
 void
 transaction_commit(struct state *state, struct toplevel *toplevel) {
@@ -410,59 +439,6 @@ find_in_toplevels(struct state *state, struct toplevel *toplevel) {
 }
 
 void
-transaction_remove(struct state *state, struct toplevel *toplevel) {
-    if(toplevel->transaction_state == TRANSACTION_STATE_CLEAN) {
-        return;
-    }
-
-    // this toplevel is part of the current transaction, meaning its somewhere in the list
-    // `state->transaction.toplevels`. we find it and remove it from the list
-    int idx = find_in_toplevels(state, toplevel);
-    ASSERT(idx >= 0);
-    toplevel_ptr_array_remove_fast(&state->transaction.toplevels, idx);
-
-    if(toplevel->transaction_state == TRANSACTION_STATE_DIRTY) {
-        // also decrese the count
-        ASSERT(state->transaction.dirty_count > 0);
-        state->transaction.dirty_count--;
-        // if(state->transaction.dirty_count == 0) {
-        //     perform_transaction(state);
-        // }
-    }
-
-    toplevel->transaction_state = TRANSACTION_STATE_CLEAN;
-}
-
-static void
-center_float(struct toplevel *toplevel) {
-    ASSERT(toplevel->state == TOPLEVEL_STATE_FLOAT);
-
-    struct wlr_box output_box = toplevel->workspace->output->usable_area;
-    toplevel->pending.x = output_box.x + (output_box.width - toplevel->pending.width) / 2;
-    toplevel->pending.y = output_box.y + (output_box.height - toplevel->pending.height) / 2;
-
-    toplevel->needs_centering = false;
-}
-
-static void
-conform_to_client_geometry(struct state *state, struct toplevel *toplevel) {
-    struct wlr_box *geometry = &toplevel->wlr_toplevel->base->geometry;
-
-    toplevel->pending.width = geometry->width;
-    toplevel->pending.height = geometry->height;
-
-    // need to add the border size to the box
-    if(toplevel->has_border) {
-        toplevel->pending.width += 2 * state->config.border.width;
-        toplevel->pending.height += 2 * state->config.border.width;
-    }
-
-    if(toplevel->needs_centering) {
-        center_float(toplevel);
-    }
-}
-
-void
 transaction_add_auto(struct state *state, struct toplevel *toplevel) {
     // this is called whenever we want to conform to the clients chosen size
     // we set its pending state to the reported geometry
@@ -481,12 +457,33 @@ transaction_add_auto(struct state *state, struct toplevel *toplevel) {
     schedule_stuff(state);
 }
 
+static void
+remove_toplevel(struct state *state, struct toplevel *toplevel) {
+    if(toplevel->transaction_state == TRANSACTION_STATE_CLEAN) {
+        return;
+    }
+
+    // this toplevel is part of the current transaction, meaning its somewhere in the list
+    // `state->transaction.toplevels`. we find it and remove it from the list
+    int idx = find_in_toplevels(state, toplevel);
+    ASSERT(idx >= 0);
+    toplevel_ptr_array_remove_fast(&state->transaction.toplevels, idx);
+
+    if(toplevel->transaction_state == TRANSACTION_STATE_DIRTY) {
+        // also decrese the count
+        ASSERT(state->transaction.dirty_count > 0);
+        state->transaction.dirty_count--;
+    }
+
+    toplevel->transaction_state = TRANSACTION_STATE_CLEAN;
+}
+
 void
 transaction_add_ghost(struct state *state, struct toplevel *toplevel) {
     toplevel->is_ghost = true;
     wl_list_insert(&state->transaction.ghosts, &toplevel->link);
     // remove if in the transaction currently
-    transaction_remove(state, toplevel);
+    remove_toplevel(state, toplevel);
     schedule_stuff(state);
 }
 
